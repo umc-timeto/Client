@@ -73,9 +73,35 @@
   font-display: swap;
 }
 
-/* 이후 색상 추가 예정 */
 @theme {
   --color-black: #000000;
+
+  --color-kakao-bg: #fee500;
+  --color-gray-100: #FFFFFF;
+  --color-gray-200: #EBEBEB;
+  --color-gray-300: #A5A5A5;
+  --color-gray-700: #000000;
+  --color-red-delete: #ED0505;
+
+  --font-pretendard: Pretendard, system-ui, sans-serif;
+
+  --text-title-20: 20px;
+  --text-title-20--line-height: 1.25;
+
+  --text-title-16: 16px;
+  --text-title-16--line-height: 1.25;
+
+  --text-title-14: 14px;
+  --text-title-14--line-height: 1.25;
+
+  --text-body-16: 16px;
+  --text-body-16--line-height: 1.4;
+
+  --text-body-14: 14px;
+  --text-body-14--line-height: 1.4;
+
+  --text-body-13: 13px;
+  --text-body-13--line-height: 1.4;
 }
 
 @utility no-scrollbar {
@@ -87,6 +113,34 @@
   display: none;
 }
 
+@utility title-20-semibold {
+  @apply font-pretendard text-title-20 font-semibold;
+}
+
+@utility title-16-semibold {
+  @apply font-pretendard text-title-16 font-semibold;
+}
+
+@utility title-14-semibold {
+  @apply font-pretendard text-title-14 font-semibold;
+}
+
+@utility body-16-medium {
+  @apply font-pretendard text-body-16 font-medium;
+}
+
+@utility body-14-medium {
+  @apply font-pretendard text-body-14 font-medium;
+}
+
+@utility body-14-regular {
+  @apply font-pretendard text-body-14 font-normal;
+}
+
+@utility body-13-medium {
+  @apply font-pretendard text-body-13 font-medium;
+}
+
 body {
-  font-family: Pretendard, system-ui, sans-serif;
+  font-family: var(--font-pretendard);
 }
