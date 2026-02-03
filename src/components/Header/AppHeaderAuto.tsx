@@ -55,6 +55,12 @@
  *   - 좌측: 뒤로가기 버튼
  *   - 우측: 폴더 메뉴 버튼
  * 
+ * - `/folder/select`
+ *   - 폴더 내부 목표 선택 화면
+ *   - 좌측: 닫기 버튼
+ *   - 우측: 완료 버튼
+ *   - 완료 버튼 클릭 시 상위 폴더 생성/연결 플로우로 이어짐
+ * 
  * - `/task`
  *   - 할 일 추가 화면 (단계형 플로우)
  *   - step 쿼리를 사용하여 "다음" → "저장" 버튼 전환
@@ -140,7 +146,7 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu, onComple
     onClick,
     disabled,
   }: {
-    label: string;
+    label: string | undefined;
     onClick: () => void;
     disabled?: boolean;
   }) => (
@@ -230,7 +236,8 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu, onComple
     );
   }
 
-  if (path === "/folder/select-goal") {
+
+  if (path === "/folder/select") {
     return (
       <HeaderBase
         title="목표 선택"
@@ -239,7 +246,7 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu, onComple
             <CloseSvg className="h-7.5 w-7.5" />
           </HeaderIconButton>
         }
-        right={<RightTextButton label="완료" onClick={complete} />}
+        right={<RightTextButton label=" " onClick={noop} />}
       />
     );
   }
