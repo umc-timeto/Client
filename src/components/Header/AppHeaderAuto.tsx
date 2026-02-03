@@ -87,7 +87,7 @@
  * 헤더 UI 제어를 위해 별도의 코드를 작성할 필요는 없습니다.
  */
 
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 
 import AddSvg from "@/assets/add.svg?react";
 import CalendarSvg from "@/assets/calendar.svg?react";
@@ -105,9 +105,15 @@ type AppHeaderAutoProps = {
   onComplete?: () => void;
 };
 
+type RootOutletContext = {
+  openDrawer?: () => void;
+};
+
 export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu, onComplete }: AppHeaderAutoProps) {
   const location = useLocation();
   const navigate = useNavigate();
+
+  const outletContext = useOutletContext<RootOutletContext>();
 
   const path = location.pathname;
 
@@ -117,7 +123,7 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu, onComple
   const safeStep = Number.isFinite(step) ? step : 1;
 
   const noop = () => {};
-  const openDrawer = onOpenDrawer ?? noop;
+  const openDrawer = outletContext?.openDrawer ?? onOpenDrawer ?? noop;
   const openFolderMenu = onOpenFolderMenu ?? noop;
   const complete = onComplete ?? noop;
 
