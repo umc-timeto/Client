@@ -140,7 +140,7 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu, onComple
   }) => (
     <button
       type="button"
-      className={`px-2 text-[20px] font-semibold ${
+      className={`px-2 text-title-20 font-semibold ${
         disabled ? "text-[#B0B0B0]" : "text-[#006fff]"
       }`}
       onClick={disabled ? undefined : onClick}
