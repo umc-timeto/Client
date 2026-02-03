@@ -1,8 +1,11 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { AppHeaderAuto } from "@/components/Header/index";
 
 export default function ProtectedLayout() {
   const location = useLocation();
-  const isAuthenticated = true; // 이후 실제 인증 상태로 교체
+
+  // TODO: 실제 인증 상태로 교체
+  const isAuthenticated = true;
 
   // 비인증: 로그인(서비스 첫 화면: /)으로 보내고, 원래 가려던 경로를 state로 보관
   if (!isAuthenticated) {
@@ -14,5 +17,10 @@ export default function ProtectedLayout() {
     return <Navigate to="/home" replace />;
   }
 
-  return <Outlet />;
+  return (
+    <>
+      <AppHeaderAuto />
+      <Outlet />
+    </>
+  );
 }

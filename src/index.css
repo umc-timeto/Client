@@ -73,9 +73,68 @@
   font-display: swap;
 }
 
-/* 이후 색상 추가 예정 */
 @theme {
+  --font-pretendard: Pretendard, system-ui, sans-serif;
+
+  --text-title-20: 20px;
+  --text-title-20--line-height: 1.25;
+
+  --text-title-16: 16px;
+  --text-title-16--line-height: 1.25;
+
+  --text-title-14: 14px;
+  --text-title-14--line-height: 1.25;
+
+  --text-body-16: 16px;
+  --text-body-16--line-height: 1.4;
+
+  --text-body-14: 14px;
+  --text-body-14--line-height: 1.4;
+
+  --text-body-13: 13px;
+  --text-body-13--line-height: 1.4;
+
+
   --color-black: #000000;
+  --color-kakao-bg: #fee500;
+  --color-gray-100: #FFFFFF;
+  --color-gray-200: #EBEBEB;
+  --color-gray-300: #A5A5A5;
+  --color-gray-700: #0F0F0F;
+  --color-red-delete: #ED0505;
+
+  --color-green-light: #eaf7f6;
+  --color-green-light-hover: #dff3f2;
+  --color-green-light-active: #bce6e3;
+  --color-green-normal: #28aea6;
+  --color-green-normal-hover: #249d95;
+  --color-green-normal-active: #208b85;
+  --color-green-dark: #1e837d;
+  --color-green-dark-hover: #186864;
+  --color-green-dark-active: #124e4b;
+  --color-green-darker: #0e3d3a;
+
+  --color-orange-light: #fff5eb;
+  --color-orange-light-hover: #fff0e0;
+  --color-orange-light-active: #fee0bf;
+  --color-orange-normal: #fc9c32;
+  --color-orange-normal-hover: #e38c2d;
+  --color-orange-normal-active: #ca7d28;
+  --color-orange-dark: #bd7526;
+  --color-orange-dark-hover: #975e1e;
+  --color-orange-dark-active: #714616;
+  --color-orange-darker: #583712;
+
+  --color-grey-light: #ebebeb;
+  --color-grey-light-hover: #e1e1e1;
+  --color-grey-light-active: #c2c2c2;
+  --color-grey-normal: #3a3a3a;
+  --color-grey-normal-hover: #343434;
+  --color-grey-normal-active: #2e2e2e;
+  --color-grey-dark: #2c2c2c;
+  --color-grey-dark-hover: #232323;
+  --color-grey-dark-active: #1a1a1a;
+  --color-grey-darker: #141414;
 }
 
 @utility no-scrollbar {
@@ -87,6 +146,34 @@
   display: none;
 }
 
+@utility title-20-semibold {
+  @apply font-pretendard text-title-20 font-semibold;
+}
+
+@utility title-16-semibold {
+  @apply font-pretendard text-title-16 font-semibold;
+}
+
+@utility title-14-semibold {
+  @apply font-pretendard text-title-14 font-semibold;
+}
+
+@utility body-16-medium {
+  @apply font-pretendard text-body-16 font-medium;
+}
+
+@utility body-14-medium {
+  @apply font-pretendard text-body-14 font-medium;
+}
+
+@utility body-14-regular {
+  @apply font-pretendard text-body-14 font-normal;
+}
+
+@utility body-13-medium {
+  @apply font-pretendard text-body-13 font-medium;
+}
+
 body {
-  font-family: Pretendard, system-ui, sans-serif;
+  font-family: var(--font-pretendard);
 }
