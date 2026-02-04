@@ -4,9 +4,23 @@ import type { RouteObject } from "react-router-dom";
 import RootLayout from "@/layouts/RootLayout";
 import ProtectedLayout from "@/layouts/ProtectedLayout";
 
-import { LoginPage, HomePage, GoalPage, FolderPage, FolderSelectPage, TaskPage, TimeBlockPage, MyLogPage } from "@/pages";
+import {
+  LoginPage,
+  KakaoCallbackPage,
+  HomePage,
+  GoalPage,
+  FolderPage,
+  FolderSelectPage,
+  TaskPage,
+  TimeBlockPage,
+  MyLogPage,
+} from "@/pages";
 
-const publicChildren: RouteObject[] = [{ index: true, element: <LoginPage /> }];
+const publicChildren: RouteObject[] = [
+  { index: true, element: <LoginPage /> },
+  { path: "login", element: <LoginPage /> },
+  { path: "auth/callback/kakao", element: <KakaoCallbackPage /> },
+];
 
 const protectedChildren: RouteObject[] = [
   { path: "home", element: <HomePage /> },
