@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import TimePickerModel from "@/components/TimePickerModel";
+import UnderlineBox from "@/components/UnderlineBox";
 import type { TaskPriority } from "@/types/task";
 
 function formatDuration(hours: number, minutes: number) {
@@ -65,10 +66,6 @@ export default function TaskPage() {
   //STEP 1: 할 일 입력
   //========================
   if (safeStep < 2) {
-    //피그마값(입력/선택 텍스트): #0F0F0F / 22px / 600 / H=25
-    const valueTextCls =
-      "font-pretendard text-[22px] font-semibold leading-[25px] text-[#0F0F0F]";
-
     return (
       <div className="bg-white px-5 pt-8">
         {/*상단 안내 타이틀*/}
@@ -83,62 +80,26 @@ export default function TaskPage() {
           부담 없이 도전할 수 있는 일부터 시작해요
         </p>
 
-        {/*할 일 이름 입력 블록*/}
+        {/*할 일 이름 입력*/}
         <div className="mt-10">
-          {/*라벨:입력값 유무에 따라 색 반응형*/}
-          <div
-            className={[
-              "font-pretendard text-[13px] font-medium leading-normal",
-              titleActive ? "text-gray-700" : "text-gray-300",
-            ].join(" ")}
-          >
-            할 일 이름
-          </div>
-
-          {/*입력 영역:밑줄(border)만 색 반응형, 입력 텍스트는 항상 #0F0F0F*/}
-          <div
-            className={[
-              "mt-3 w-full border-b pb-2", //pb로 텍스트가 라인 위에 떠보이게
-              titleActive ? "border-gray-700" : "border-gray-200",
-            ].join(" ")}
-          >
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className={[
-                "w-full bg-transparent outline-none",
-                valueTextCls, //입력되는 텍스트는 항상 검정 고정(피그마값)
-              ].join(" ")}
-              style={{ height: 25 }}
-            />
-          </div>
+          <UnderlineBox
+            label="할 일 이름"
+            active={titleActive}
+            mode="input"
+            inputValue={title}
+            onInputChange={(v) => setTitle(v)}
+          />
         </div>
 
-        {/*예상 소요 시간 선택 블록*/}
+        {/*예상 소요 시간 선택*/}
         <div className="mt-10">
-          {/*라벨:선택값 유무에 따라 색 반응형*/}
-          <div
-            className={[
-              "font-pretendard text-[13px] font-medium leading-normal",
-              durationActive ? "text-gray-700" : "text-gray-300",
-            ].join(" ")}
-          >
-            예상 소요 시간
-          </div>
-
-          {/*선택 버튼:밑줄(border)만 색 반응형, 표시 텍스트는 항상 #0F0F0F*/}
-          <button
-            type="button"
+          <UnderlineBox
+            label="예상 소요 시간"
+            active={durationActive}
+            mode="button"
+            valueText={durationText}
             onClick={() => setTimeModalOpen(true)}
-            className={[
-              "mt-3 w-full text-left border-b pb-2", //pb로 텍스트가 라인 위에 떠보이게
-              durationActive ? "border-gray-700" : "border-gray-200",
-            ].join(" ")}
-          >
-            <span className="block" style={{ height: 25 }}>
-              <span className={valueTextCls}>{durationText || " "}</span>
-            </span>
-          </button>
+          />
         </div>
 
         {/*소요 시간 휠 모달*/}
@@ -186,7 +147,7 @@ export default function TaskPage() {
               onClick={() => setPriority(p)}
               className={[
                 //한 줄 row (피그마: W335 / H54 / padding 13 10 / radius 8)
-                "w-full h-13.5 px-2.5 py-3.25 rounded-lg",
+                "w-full h-[54px] px-[10px] py-[13px] rounded-[8px]",
                 "flex items-center justify-between",
                 //선택 상태 배경 (피그마: #F1F1F1)
                 selected ? "bg-[#F1F1F1]" : "bg-transparent",
@@ -200,13 +161,11 @@ export default function TaskPage() {
               {/*체크 인디케이터*/}
               <span
                 className={[
-                  "flex h-4.5 w-4.5 items-center justify-center rounded-[20px] border",
+                  "flex h-[18px] w-[18px] items-center justify-center rounded-[20px] border",
                   selected ? "border-[#B0B0B0] bg-[#B0B0B0]" : "border-[#B0B0B0] bg-transparent",
                 ].join(" ")}
               >
-                {selected ? (
-                  <span className="text-gray-100 text-[12px] leading-none">✓</span>
-                ) : null}
+                {selected ? <span className="text-gray-100 text-[12px] leading-none">✓</span> : null}
               </span>
             </button>
           );
