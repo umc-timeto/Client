@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import TimePickerModel from "@/components/TimePickerModel";
 import UnderlineBox from "@/components/UnderlineBox";
-import type { TaskPriority } from "@/types/task";
+import type { TaskCreateInput, TaskPriority } from "@/types/task";
+import { MOCK_FOLDER_ID, mockTasks } from "./mock";
+import { createTask, ensureMockSeed } from "@/api/taskApi";
 
 function formatDuration(hours: number, minutes: number) {
   if (hours === 0 && minutes === 0) return "";
@@ -12,7 +14,13 @@ function formatDuration(hours: number, minutes: number) {
 }
 
 export default function TaskPage() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  //앱 최초 1회: localStorage에 더미 시드
+  useEffect(() => {
+    ensureMockSeed(mockTasks);
+  }, []);
 
   //URL 쿼리로 step 제어 (1: 입력 / 2: 중요도)
   const stepRaw = searchParams.get("step");
@@ -41,6 +49,17 @@ export default function TaskPage() {
   const canNext = titleActive && durationActive;
   const canSave = priority !== null;
 
+  //POST로 보낼 payload(모양새)
+  const createInput: TaskCreateInput | null = useMemo(() => {
+    if (!canSave) return null;
+    return {
+      folderId: MOCK_FOLDER_ID, //지금은 고정(폴더 페이지 완성 전)
+      title: title.trim(),
+      durationMinutes: hours * 60 + minutes,
+      priority: priority!, //canSave면 null 아님
+    };
+  }, [canSave, hours, minutes, priority, title]);
+
   //헤더(AppHeaderAuto)가 참조하는 canNext/canSave를 URL 쿼리에 반영
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
@@ -61,6 +80,28 @@ export default function TaskPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canNext, canSave, safeStep]);
+
+  //========================
+  //SAVE 트리거(action=save)
+  //========================
+  useEffect(() => {
+    const action = searchParams.get("action");
+    if (action !== "save") return;
+    if (!createInput) return;
+
+    (async () => {
+      await createTask(createInput);
+
+      //action 제거(중복 실행 방지)
+      const next = new URLSearchParams(searchParams);
+      next.delete("action");
+      setSearchParams(next, { replace: true });
+
+      //저장 후 폴더 페이지로 이동
+      navigate("/folder");
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, createInput]);
 
   //========================
   //STEP 1: 할 일 입력
@@ -146,22 +187,19 @@ export default function TaskPage() {
               type="button"
               onClick={() => setPriority(p)}
               className={[
-                //한 줄 row (피그마: W335 / H54 / padding 13 10 / radius 8)
-                "w-full h-[54px] px-[10px] py-[13px] rounded-[8px]",
+                //피그마: W335 / H54 / padding 13 10 / radius 8
+                "w-full h-13.5 px-2.5 py-3.25 rounded-lg",
                 "flex items-center justify-between",
-                //선택 상태 배경 (피그마: #F1F1F1)
                 selected ? "bg-[#F1F1F1]" : "bg-transparent",
               ].join(" ")}
             >
-              {/*항목 텍스트*/}
               <span className="font-pretendard text-[16px] font-semibold leading-normal text-gray-700">
                 {p}
               </span>
 
-              {/*체크 인디케이터*/}
               <span
                 className={[
-                  "flex h-[18px] w-[18px] items-center justify-center rounded-[20px] border",
+                  "flex h-4.5 w-4.5 items-center justify-center rounded-[20px] border",
                   selected ? "border-[#B0B0B0] bg-[#B0B0B0]" : "border-[#B0B0B0] bg-transparent",
                 ].join(" ")}
               >
