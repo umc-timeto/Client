@@ -72,6 +72,18 @@ export default function TimePickerModel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  //모달 열려있는 동안 배경 스크롤 방지
+  useEffect(() => {
+    if (!open) return;
+
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+
   //0시간 0분이면 완료 비활성
   const canConfirm = !(h === 0 && m === 0);
 
