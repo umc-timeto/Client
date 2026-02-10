@@ -58,8 +58,8 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu, onComple
   }) => (
     <button
       type="button"
-      className={`px-2 text-title-20 font-semibold ${
-        disabled ? "text-[#B0B0B0]" : "text-[#006fff]"
+      className={`px-2 text-title-20 font-normal ${
+        disabled ? "text-grey-light-active" : "text-yellow-normal"
       }`}
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
@@ -182,6 +182,8 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu, onComple
 
   if (path === "/timeblock") {
     const rawYm = searchParams.get("ym");
+    const rawDate = searchParams.get("date");
+    const rawW = searchParams.get("w");
 
     const today = new Date();
     const fallbackYm = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
@@ -199,6 +201,14 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu, onComple
     };
 
     const view = searchParams.get("view");
+
+    const ymFromYmd = (v: string | null) => {
+      if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+      const [y, m] = v.split("-");
+      return `${y}-${m}`;
+    };
+
+    const titleYm = view === "week" ? ymFromYmd(rawW) ?? ymFromYmd(rawDate) ?? ym : ym;
 
     const goMonth = (delta: number) => {
       const nextYm = shiftYm(ym, delta);
@@ -245,7 +255,7 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu, onComple
               <CalPrevSvg className="h-7 w-7" />
             </button>
 
-            <div className="text-[20px] font-semibold text-grey-dark">{formatYearMonthFromYm(ym)}</div>
+            <div className="text-[20px] font-semibold text-grey-dark">{formatYearMonthFromYm(titleYm)}</div>
 
             <button
               type="button"
