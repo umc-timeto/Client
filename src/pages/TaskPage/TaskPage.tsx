@@ -5,6 +5,7 @@ import UnderlineBox from "@/components/UnderlineBox";
 import type { TaskCreateInput, TaskPriority } from "@/types/task";
 import { MOCK_FOLDER_ID, mockTasks } from "./mock";
 import { createTask, ensureMockSeed } from "@/api/taskApi";
+import { useHeaderActions } from "@/contexts/HeaderActionContext";
 
 function formatDuration(hours: number, minutes: number) {
   if (hours === 0 && minutes === 0) return "";
@@ -16,40 +17,62 @@ function formatDuration(hours: number, minutes: number) {
 export default function TaskPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { setOnComplete } = useHeaderActions();
 
+  //========================
   //앱 최초 1회: localStorage에 더미 시드
+  //========================
   useEffect(() => {
     ensureMockSeed(mockTasks);
   }, []);
 
+  //========================
   //URL 쿼리로 step 제어 (1: 입력 / 2: 중요도)
+  //========================
   const stepRaw = searchParams.get("step");
   const step = Number(stepRaw ?? "1");
   const safeStep = step === 2 ? 2 : 1; //step은 1/2만 허용
 
+  //========================
   //STEP1 입력값
+  //========================
   const [title, setTitle] = useState("");
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(0);
 
+  //========================
   //STEP2 선택값
+  //========================
   const [priority, setPriority] = useState<TaskPriority | null>(null);
 
+  //========================
   //시간 선택 모달
+  //========================
   const [timeModalOpen, setTimeModalOpen] = useState(false);
 
+  //========================
   //표시용(예: "1시간 20분", "20분")
-  const durationText = useMemo(() => formatDuration(hours, minutes), [hours, minutes]);
+  //========================
+  const durationText = useMemo(
+    () => formatDuration(hours, minutes),
+    [hours, minutes]
+  );
 
+  //========================
   //STEP1 라벨/라인 강조용
+  //========================
   const titleActive = title.trim().length > 0;
   const durationActive = durationText.length > 0;
 
-  //헤더(AppHeaderAuto)에서 다음/저장 버튼 활성화 판단용
+  //========================
+  //헤더(AppHeaderAuto) 버튼 활성화 판단용
+  //========================
   const canNext = titleActive && durationActive;
   const canSave = priority !== null;
 
+  //========================
   //POST로 보낼 payload(모양새)
+  //========================
   const createInput: TaskCreateInput | null = useMemo(() => {
     if (!canSave) return null;
     return {
@@ -60,13 +83,15 @@ export default function TaskPage() {
     };
   }, [canSave, hours, minutes, priority, title]);
 
-  //헤더(AppHeaderAuto)가 참조하는 canNext/canSave를 URL 쿼리에 반영
+  //========================
+  //헤더(AppHeaderAuto)가 참조하는
+  //canNext / canSave를 URL 쿼리에 반영
+  //========================
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
 
     if (!next.get("step")) next.set("step", "1");
 
-    //step에 따라 헤더가 보는 값 분기
     if (safeStep >= 2) {
       next.delete("canNext");
       next.set("canSave", canSave ? "1" : "0");
@@ -82,26 +107,24 @@ export default function TaskPage() {
   }, [canNext, canSave, safeStep]);
 
   //========================
-  //SAVE 트리거(action=save)
+  //헤더 "저장" 버튼 동작 등록
   //========================
   useEffect(() => {
-    const action = searchParams.get("action");
-    if (action !== "save") return;
-    if (!createInput) return;
+    const handleSave = async () => {
+      //step2가 아니면 저장 동작 무시
+      if (safeStep < 2) return;
+      if (!createInput) return;
 
-    (async () => {
       await createTask(createInput);
-
-      //action 제거(중복 실행 방지)
-      const next = new URLSearchParams(searchParams);
-      next.delete("action");
-      setSearchParams(next, { replace: true });
-
-      //저장 후 폴더 페이지로 이동
       navigate("/folder");
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, createInput]);
+    };
+
+    //⚠️ 실행하지 말고, "함수 자체"만 등록
+    setOnComplete(() => handleSave);
+
+    //페이지 이탈 시 헤더 동작 해제
+    return () => setOnComplete(null);
+  }, [setOnComplete, safeStep, createInput, navigate]);
 
   //========================
   //STEP 1: 할 일 입력
@@ -187,7 +210,6 @@ export default function TaskPage() {
               type="button"
               onClick={() => setPriority(p)}
               className={[
-                //피그마: W335 / H54 / padding 13 10 / radius 8
                 "w-full h-13.5 px-2.5 py-3.25 rounded-lg",
                 "flex items-center justify-between",
                 selected ? "bg-[#F1F1F1]" : "bg-transparent",
@@ -200,10 +222,14 @@ export default function TaskPage() {
               <span
                 className={[
                   "flex h-4.5 w-4.5 items-center justify-center rounded-[20px] border",
-                  selected ? "border-[#B0B0B0] bg-[#B0B0B0]" : "border-[#B0B0B0] bg-transparent",
+                  selected
+                    ? "border-[#B0B0B0] bg-[#B0B0B0]"
+                    : "border-[#B0B0B0] bg-transparent",
                 ].join(" ")}
               >
-                {selected ? <span className="text-gray-100 text-[12px] leading-none">✓</span> : null}
+                {selected ? (
+                  <span className="text-gray-100 text-[12px] leading-none">✓</span>
+                ) : null}
               </span>
             </button>
           );

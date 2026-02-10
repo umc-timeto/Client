@@ -105,17 +105,19 @@ import PrevSvg from "@/assets/prev.svg?react";
 import { HeaderBase, StatusHeaderBase } from "./HeaderBase";
 import HeaderIconButton from "./HeaderIconButton";
 
+import { useHeaderActions } from "@/contexts/HeaderActionContext";
+
 type AppHeaderAutoProps = {
   onOpenDrawer?: () => void;
   onOpenFolderMenu?: () => void;
-  onComplete?: () => void;
-};
+}; //onComplete?: () => void; 제거
 
 type RootOutletContext = {
   openDrawer?: () => void;
 };
 
-export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu, onComplete }: AppHeaderAutoProps) {
+//onComplete 를 context에서 가져오도록 수정
+export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu}: AppHeaderAutoProps) {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -127,6 +129,8 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu, onComple
   const stepRaw = searchParams.get("step");
   const step = Number(stepRaw ?? "1");
   const safeStep = Number.isFinite(step) ? step : 1;
+
+  const { onComplete } = useHeaderActions(); //추가
 
   const noop = () => {};
   const openDrawer = outletContext?.openDrawer ?? onOpenDrawer ?? noop;
