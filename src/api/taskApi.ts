@@ -33,6 +33,7 @@ export async function getTasksByFolder(folderId: string): Promise<Task[]> {
   return tasks.filter((t) => t.folderId === folderId);
 }
 
+
 //POST 모양새(나중에 fetch로 교체)
 export async function createTask(input: TaskCreateInput): Promise<Task> {
   const tasks = loadTasks();
@@ -48,6 +49,8 @@ export async function createTask(input: TaskCreateInput): Promise<Task> {
 
   tasks.unshift(newTask);
   saveTasks(tasks);
+
+  console.log("📦 createTask payload:", input); //저장 됐는지 확인용
 
   //네트워크 흉내(없어도 되는데, 동작 확인용)
   await new Promise((r) => setTimeout(r, 150));
