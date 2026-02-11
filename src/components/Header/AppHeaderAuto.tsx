@@ -299,10 +299,15 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu}: AppHead
   if (path === "/mylog") {
     return (
       <StatusHeaderBase
-        title=""
+        title="나의 일지"
         left={
           <HeaderIconButton ariaLabel="menu" onClick={openDrawer}>
             <MenuSvg className="h-7 w-7" />
+          </HeaderIconButton>
+        }
+        right={
+          <HeaderIconButton ariaLabel="spacer" onClick={noop}>
+            <MenuSvg className="h-7 w-7 opacity-0" />
           </HeaderIconButton>
         }
       />
