@@ -135,6 +135,36 @@
   --color-grey-dark-hover: #232323;
   --color-grey-dark-active: #1a1a1a;
   --color-grey-darker: #141414;
+
+  --color-red-nomal: #FF8373;
+  --color-red-light: #FFECEA;
+
+  --color-orange-nomal: #F6AE14;
+  --color-orange-light: #FEF3DC;
+
+  --color-yellow-nomal: #FFE240;
+  --color-yellow-light: #FFFBE2;
+
+  --color-lightGreen-nomal: #D5F05F;
+  --color-lightGreen-light: #F9FDE7;
+
+  --color-green-nomal: #75C7AD;
+  --color-green-light: #EAF7F3;
+
+  --color-cyan-nomal: #8AE6EE;
+  --color-cyan-light: #EDFBFC;
+
+  --color-skyBlue-nomal: #6FB7FF;
+  --color-skyBlue-light: #E9F4FF;
+
+  --color-blue-nomal: #638FFF;
+  --color-blue-light: #E8EEFF;
+
+  --color-purple-nomal: #C58BFF;
+  --color-purple-light: #F7EDFF;
+
+  --color-pink-nomal: #FF9FD4;
+  --color-pink-light: #FFF1F9;
 }
 
 @utility no-scrollbar {
