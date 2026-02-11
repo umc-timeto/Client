@@ -260,7 +260,7 @@ export default function FolderPage() {
     <div className="px-5 pt-10 pb-24">
       {/*진행 헤더*/}
       <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm text-[#A5A5A5]">
+        <div className="flex items-center gap-2 text-sm text-gray-300">
           <Clock3 size={16} />
           <span className="font-semibold">{`진행 (${progressCount}개)`}</span>
         </div>
@@ -269,27 +269,27 @@ export default function FolderPage() {
         <button
           type="button"
           onClick={goTaskAdd}
-          className="rounded-md p-2 text-[#A5A5A5] hover:bg-black/5 hover:text-[#767676] active:bg-black/10"
+          className="rounded-md p-2 text-gray-300 hover:bg-black/5 hover:text-[#767676] active:bg-black/10"
         >
           <Plus size={18} />
         </button>
       </div>
 
       {/*진행 박스:항상 보임*/}
-      <div className="overflow-hidden rounded-[8px] bg-[#FFFAEE]">
+      <div className="overflow-hidden rounded-lg bg-[#FFFAEE]">
         {progressCount === 0 ? (
           <button
             type="button"
             onClick={goTaskAdd}
             className="flex w-full items-center gap-3 px-4 py-5 text-left hover:bg-black/5 active:bg-black/10"
           >
-            <span className="text-[#A5A5A5]">
+            <span className="text-gray-300">
               <Plus size={18} />
             </span>
-            <span className="text-[14px] font-medium text-[#A5A5A5]">할 일을 추가하세요</span>
+            <span className="text-[14px] font-medium text-gray-300">할 일을 추가하세요</span>
           </button>
         ) : (
-          <div className="divide-y divide-[#EBEBEB]">
+          <div className="divide-y divide-gray-200">
             {progressTasks.map((t) => (
               <button
                 key={t.id}
@@ -300,23 +300,24 @@ export default function FolderPage() {
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => onDropOnItem(t.id, "progress")}
                 onClick={() => setOpenTaskId(t.id)}
-                className="flex w-full items-center gap-3 px-4 py-[18px] text-left hover:bg-black/5 active:bg-black/10"
+                className="flex w-full items-center gap-3 px-4 py-4.5 text-left hover:bg-black/5 active:bg-black/10"
                 style={{ minHeight: 74 }}
               >
                 {/*난이도 배지*/}
-                <span className="grid h-[22px] w-[22px] place-items-center rounded-[2px] bg-[#F6AE14] text-[12px] font-semibold text-white">
+                <span className="grid h-5.5 w-5.5 place-items-center rounded-xs bg-[#F6AE14] text-[12px] font-semibold text-white">
                   {t.priority}
                 </span>
 
                 {/*제목/날짜*/}
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[15px] font-semibold leading-[150%] text-[#0F0F0F]">
+                  <div className="truncate text-[15px] font-semibold leading-[150%] text-gray-700">
+
                     {t.title}
                   </div>
                 </div>
 
                 {/*예상 시간*/}
-                <span className="grid h-[22px] w-[58px] place-items-center rounded-[4px] border border-[#F6AE14] text-[12px] font-semibold text-[#F6AE14]">
+                <span className="grid h-5.5 w-14.5 place-items-center rounded-sm border border-[#F6AE14] text-[12px] font-semibold text-[#F6AE14]">
                   {formatDuration(t.durationMinutes)}
                 </span>
               </button>
@@ -329,14 +330,14 @@ export default function FolderPage() {
       {doneCount > 0 && (
         <>
           <div className="mt-8 mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm text-[#A5A5A5]">
+            <div className="flex items-center gap-2 text-sm text-gray-300">
               <CheckCircle2 size={16} />
               <span className="font-semibold">{`완료 (${doneCount}개)`}</span>
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-[8px] bg-[#FFFAEE]">
-            <div className="divide-y divide-[#EBEBEB]">
+          <div className="overflow-hidden rounded-lg bg-[#FFFAEE]">
+            <div className="divide-y divide-gray-200">
               {doneTasks.map((t) => (
                 <button
                   key={t.id}
@@ -347,23 +348,23 @@ export default function FolderPage() {
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={() => onDropOnItem(t.id, "done")}
                   onClick={() => setOpenTaskId(t.id)}
-                  className="flex w-full items-center gap-3 px-4 py-[18px] text-left hover:bg-black/5 active:bg-black/10"
+                  className="flex w-full items-center gap-3 px-4 py-4.5 text-left hover:bg-black/5 active:bg-black/10"
                   style={{ minHeight: 74 }}
                 >
                   {/*난이도 배지*/}
-                  <span className="grid h-[22px] w-[22px] place-items-center rounded-[2px] bg-[#F6AE14] text-[12px] font-semibold text-white">
+                  <span className="grid h-5.5 w-5.5 place-items-center rounded-xs bg-[#F6AE14] text-[12px] font-semibold text-white">
                     {t.priority}
                   </span>
 
                   {/*제목/날짜*/}
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[15px] font-semibold leading-[150%] text-[#A5A5A5] line-through">
+                    <div className="truncate text-[15px] font-semibold leading-[150%] text-gray-300 line-through">
                       {t.title}
                     </div>
                   </div>
 
                   {/*예상 시간*/}
-                  <span className="grid h-[22px] w-[58px] place-items-center rounded-[4px] border border-[#F6AE14] text-[12px] font-semibold text-[#F6AE14]">
+                  <span className="grid h-5.5 w-14.5 place-items-center rounded-sm border border-[#F6AE14] text-[12px] font-semibold text-[#F6AE14]">
                     {formatDuration(t.durationMinutes)}
                   </span>
                 </button>
@@ -386,22 +387,22 @@ export default function FolderPage() {
         >
           <div
             ref={modalPanelRef}
-            className="w-full max-w-[420px] rounded-[14px] bg-white p-6 shadow-[0_0_10px_0_rgba(15,15,15,0.04)]"
+            className="w-full max-w-105 rounded-[14px] bg-white p-6 shadow-[0_0_10px_0_rgba(15,15,15,0.04)]"
           >
             {/*모달 헤더*/}
             <div className="flex items-center justify-between">
-              <div className="text-[16px] font-normal text-[#0F0F0F]">할 일 정보</div>
+              <div className="text-[16px] font-normal text-gray-700">할 일 정보</div>
               <button
                 type="button"
                 onClick={closeModal}
-                className="grid h-[24px] w-[24px] place-items-center rounded-md text-[#767676] hover:bg-black/5 active:bg-black/10"
+                className="grid h-6 w-6 place-items-center rounded-md text-[#767676] hover:bg-black/5 active:bg-black/10"
               >
                 <X size={18} />
               </button>
             </div>
 
             {/*시간 정보:타임블록 미구현이면 - -*/}
-            <div className="mt-5 text-center text-[28px] font-semibold leading-normal text-[#0F0F0F]">
+            <div className="mt-5 text-center text-[28px] font-semibold leading-normal text-gray-700">
               {"-"}
             </div>
 
@@ -413,9 +414,9 @@ export default function FolderPage() {
                 <button
                   type="button"
                   onClick={goEditStep1}
-                  className="group flex items-center gap-2 rounded-md px-2 py-1 text-right text-[14px] font-semibold text-[#0F0F0F] hover:bg-black/5 active:bg-black/10"
+                  className="group flex items-center gap-2 rounded-md px-2 py-1 text-right text-[14px] font-semibold text-gray-700 hover:bg-black/5 active:bg-black/10"
                 >
-                  <span className="max-w-[220px] truncate">{openTask.title}</span>
+                  <span className="max-w-55 truncate">{openTask.title}</span>
                   <ChevronRight size={14} className="text-[#767676] group-hover:text-[#767676]" />
                 </button>
               </div>
@@ -426,7 +427,7 @@ export default function FolderPage() {
                 <button
                   type="button"
                   onClick={goEditStep1}
-                  className="group flex items-center gap-2 rounded-md px-2 py-1 text-right text-[14px] font-semibold text-[#0F0F0F] hover:bg-black/5 active:bg-black/10"
+                  className="group flex items-center gap-2 rounded-md px-2 py-1 text-right text-[14px] font-semibold text-gray-700 hover:bg-black/5 active:bg-black/10"
                 >
                   <span>{formatDuration(openTask.durationMinutes)}</span>
                   <ChevronRight size={14} className="text-[#767676] group-hover:text-[#767676]" />
@@ -439,7 +440,7 @@ export default function FolderPage() {
                 <button
                   type="button"
                   onClick={goEditStep2}
-                  className="group flex items-center gap-2 rounded-md px-2 py-1 text-right text-[14px] font-semibold text-[#0F0F0F] hover:bg-black/5 active:bg-black/10"
+                  className="group flex items-center gap-2 rounded-md px-2 py-1 text-right text-[14px] font-semibold text-gray-700 hover:bg-black/5 active:bg-black/10"
                 >
                   <span>{openTask.priority}</span>
                   <ChevronRight size={14} className="text-[#767676] group-hover:text-[#767676]" />
@@ -453,7 +454,7 @@ export default function FolderPage() {
                 type="button"
                 onClick={removeFromModal}
                 className={[
-                  "h-[42px] flex-1 rounded-[6px] bg-[#F1F1F1] text-[14px] font-semibold text-[#767676]",
+                  "h-10.5 flex-1 rounded-md bg-[#F1F1F1] text-[14px] font-semibold text-[#767676]",
                   "hover:bg-red-100 hover:text-red-600 active:bg-red-200",
                 ].join(" ")}
               >
@@ -464,7 +465,7 @@ export default function FolderPage() {
                 type="button"
                 onClick={toggleDoneFromModal}
                 className={[
-                  "h-[42px] flex-[2] rounded-[6px] bg-[#F1F1F1] text-[14px] font-semibold text-[#767676]",
+                  "h-10.5 flex-2 rounded-md bg-[#F1F1F1] text-[14px] font-semibold text-[#767676]",
                   openTask.isDone
                     ? "hover:bg-gray-200 hover:text-gray-700 active:bg-gray-300"
                     : "hover:bg-green-100 hover:text-green-700 active:bg-green-200",

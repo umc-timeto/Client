@@ -7,7 +7,7 @@ export type Task = {
   durationMinutes: number;  // 소요 시간 (분 단위)
   priority: TaskPriority;   // 중요도
   isDone: boolean;          // 진행/완료
-};
+};  
 
 export type TaskCreateInput = {
   folderId: string;
