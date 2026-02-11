@@ -1,3 +1,26 @@
+import CalendarMonth from "@/pages/TimeBlockPage/components/CalendarMonth";
+import CalendarWeekStrip from "@/pages/TimeBlockPage/components/CalendarWeekStrip";
+import useCalendarModel from "@/hooks/TimeBlockPage/useCalendarModel";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+
+const DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"] as const;
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+const toTimeLabel = (h: number) => {
+  const hour = ((h % 24) + 24) % 24;
+  return `${pad2(hour)}:00`;
+};
+
+const WEEK_STRIP_HEIGHT_PX = 72;
+const HEADER_HEIGHT_PX = 125;
+const CONDENSE_EARLY_PX = 96;
+const WEEK_STRIP_ANIM_MS = 180;
+
+
 export default function TimeBlockPage() {
   const today = useMemo(() => startOfDay(new Date()), []);
 
