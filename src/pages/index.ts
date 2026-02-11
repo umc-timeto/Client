@@ -7,3 +7,4 @@ export { default as FolderSelectPage } from "./FolderPage/FolderSelectPage";
 export { default as TaskPage } from "./TaskPage/TaskPage";
 export { default as TimeBlockPage } from "./TimeBlockPage/TimeBlockPage";
 export { default as MyLogPage } from "./MyLogPage/MyLogPage";
+export { default as SurveyPage } from "./MyLogPage/SurveyPage";

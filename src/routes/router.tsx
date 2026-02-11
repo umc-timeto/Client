@@ -14,6 +14,7 @@ import {
   TaskPage,
   TimeBlockPage,
   MyLogPage,
+  SurveyPage,
 } from "@/pages";
 
 const publicChildren: RouteObject[] = [
@@ -30,6 +31,7 @@ const protectedChildren: RouteObject[] = [
   { path: "task", element: <TaskPage /> },
   { path: "timeblock", element: <TimeBlockPage /> },
   { path: "mylog", element: <MyLogPage /> },
+  { path: "survey", element: <SurveyPage /> },
 ];
 
 const routes: RouteObject[] = [
