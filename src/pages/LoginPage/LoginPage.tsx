@@ -83,9 +83,21 @@ export default function LoginPage() {
 
   const canLogin = authorizeUrl.length > 0;
 
+  useEffect(() => {
+    console.log("[LOGIN] env.VITE_KAKAO_AUTHORIZE_URL =", import.meta.env.VITE_KAKAO_AUTHORIZE_URL);
+    console.log("[LOGIN] authorizeUrl =", authorizeUrl);
+    console.log("[LOGIN] canLogin =", canLogin);
+  }, [authorizeUrl, canLogin]);
+
   const onClickKakaoLogin = useCallback(async () => {
+    console.log("[LOGIN] click kakao login", { isLoading, canLogin, authorizeUrl });
+
     if (isLoading) return;
     if (!canLogin) {
+      console.log("[LOGIN] missing authorize url", {
+        raw: import.meta.env.VITE_KAKAO_AUTHORIZE_URL,
+        authorizeUrl,
+      });
       alert("카카오 로그인 설정이 필요합니다.");
       return;
     }
