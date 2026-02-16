@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { AppHeaderAuto } from "@/components/Header/index";
 import HeaderActionContext from "@/contexts/HeaderActionContext";
@@ -6,8 +6,36 @@ import HeaderActionContext from "@/contexts/HeaderActionContext";
 export default function ProtectedLayout() {
   const location = useLocation();
 
-  // TODO: 실제 인증 상태로 교체
-  const isAuthenticated = true;
+  const getCookie = (name: string) => {
+    const match = document.cookie.match(
+      new RegExp(`(?:^|; )${name.replace(/([.$?*|{}()\[\]\\\/\+^])/g, "\\$1")}=([^;]*)`)
+    );
+    return match ? decodeURIComponent(match[1]) : null;
+  };
+
+  const getAccessToken = () => {
+    return (
+      localStorage.getItem("accessToken") ||
+      sessionStorage.getItem("accessToken") ||
+      getCookie("accessToken")
+    );
+  };
+
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => Boolean(getAccessToken()));
+
+  useEffect(() => {
+    const sync = () => setIsAuthenticated(Boolean(getAccessToken()));
+
+    sync();
+
+    window.addEventListener("storage", sync);
+    window.addEventListener("focus", sync);
+
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("focus", sync);
+    };
+  }, []);
 
   //Header Action Context: 헤더 "완료/저장" 버튼 동작을 페이지에서 등록할 수 있게 함
   const [onComplete, setOnComplete] = useState<(() => void) | null>(null);
