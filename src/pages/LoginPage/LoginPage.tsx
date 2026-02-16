@@ -4,6 +4,7 @@ import logoAnimation from "@/assets/logo.mp4";
 import timetoText from "@/assets/timeto_text.svg";
 
 export default function LoginPage() {
+  console.error("[LOGIN] render reached");
   const [isLoading, setIsLoading] = useState(false);
 
   const [phase, setPhase] = useState<"playing" | "reveal">("playing");
