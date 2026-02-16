@@ -3,53 +3,15 @@ import kakaoIcon from "@/assets/kakao.svg";
 import logoAnimation from "@/assets/logo.mp4";
 import timetoText from "@/assets/timeto_text.svg";
 
-declare global {
-  interface Window {
-    Kakao?: {
-      isInitialized: () => boolean;
-      init: (key: string) => void;
-      Auth: {
-        authorize: (params: { redirectUri: string }) => void;
-      };
-    };
-  }
-}
-
-const KAKAO_SDK_SRC = "https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js";
-
-function loadKakaoSdk(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[src="${KAKAO_SDK_SRC}"]`) as HTMLScriptElement | null;
-    if (existing) {
-      if ((window as Window).Kakao) resolve();
-      else existing.addEventListener("load", () => resolve());
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = KAKAO_SDK_SRC;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Failed to load Kakao SDK"));
-    document.head.appendChild(script);
-  });
-}
-
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   const [phase, setPhase] = useState<"playing" | "reveal">("playing");
   const [ctaIn, setCtaIn] = useState(false);
-  const [entered, setEntered] = useState(false);
 
   const fallbackTimerRef = useRef<number | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const ctaTimerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    const t = window.requestAnimationFrame(() => setEntered(true));
-    return () => window.cancelAnimationFrame(t);
-  }, []);
 
   useEffect(() => {
     if (!logoAnimation) {
@@ -114,17 +76,12 @@ export default function LoginPage() {
     };
   }, [phase]);
 
-  const kakaoJsKey = useMemo(() => {
-    const key = import.meta.env.VITE_KAKAO_JAVASCRIPT_KEY as string | undefined;
-    return key?.trim() ?? "";
+  const authorizeUrl = useMemo(() => {
+    const v = import.meta.env.VITE_KAKAO_AUTHORIZE_URL as string | undefined;
+    return v?.trim() ?? "";
   }, []);
 
-  const redirectUri = useMemo(() => {
-    const uri = import.meta.env.VITE_KAKAO_REDIRECT_URI as string | undefined;
-    return uri?.trim() ?? "";
-  }, []);
-
-  const canLogin = kakaoJsKey.length > 0 && redirectUri.length > 0;
+  const canLogin = authorizeUrl.length > 0;
 
   const onClickKakaoLogin = useCallback(async () => {
     if (isLoading) return;
@@ -135,36 +92,20 @@ export default function LoginPage() {
 
     try {
       setIsLoading(true);
-      await loadKakaoSdk();
-
-      const Kakao = window.Kakao;
-      if (Kakao) {
-        if (!Kakao.isInitialized()) Kakao.init(kakaoJsKey);
-        Kakao.Auth.authorize({ redirectUri });
-        return;
-      }
-
-      const authorizeUrl =
-        `https://kauth.kakao.com/oauth/authorize` +
-        `?client_id=${encodeURIComponent(kakaoJsKey)}` +
-        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-        `&response_type=code`;
-
       window.location.href = authorizeUrl;
     } catch {
       setIsLoading(false);
     }
-  }, [canLogin, isLoading, kakaoJsKey, redirectUri]);
+  }, [canLogin, isLoading, authorizeUrl]);
 
   return (
     <div className="min-h-dvh bg-white">
       <div className="mx-auto w-full px-7">
         <div className="h-dvh relative">
-          <div className="absolute inset-0 grid place-items-center">
+          <div className="absolute inset-0 z-10 pointer-events-none">
             <div
               className={[
                 "tt-logo-stage",
-                entered ? "tt-logo-stage--entered" : "tt-logo-stage--entering",
                 phase === "reveal" ? "tt-logo-stage--reveal" : "",
               ]
                 .filter(Boolean)
@@ -211,7 +152,7 @@ export default function LoginPage() {
                         />
                       )
                     ) : (
-                      <div className="h-[124px] w-[131px] rounded-[8px] bg-black/10" />
+                      <div className="h-31 w-32.75 rounded-lg bg-black/10" />
                     )}
                   </div>
                 </div>
@@ -223,7 +164,7 @@ export default function LoginPage() {
 
           <button
             type="button"
-            className={`absolute left-0 right-0 bottom-17 w-full rounded-md bg-kakao-bg disabled:opacity-50 py-3.75 tt-cta ${ctaIn ? "tt-cta--in" : ""}`}
+            className={`absolute z-20 pointer-events-auto left-0 right-0 bottom-17 w-full rounded-md bg-kakao-bg disabled:opacity-50 py-3.75 tt-cta ${ctaIn ? "tt-cta--in" : ""}`}
             onClick={onClickKakaoLogin}
             disabled={!canLogin || isLoading}
           >
@@ -236,17 +177,11 @@ export default function LoginPage() {
           <style>
             {`
               .tt-logo-stage {
-                display: grid;
-                place-items: center;
-                transform: translate3d(0, -236px, 0);
-                transition: transform 900ms cubic-bezier(0.2, 0.8, 0.2, 1);
+                position: absolute;
+                left: 50%;
+                top: 236px;
+                transform: translate3d(-50%, 0, 0);
                 will-change: transform;
-              }
-              .tt-logo-stage--entered {
-                transform: translate3d(0, 0, 0);
-              }
-              .tt-logo-stage--reveal {
-                transform: translate3d(0, 0, 0);
               }
 
               .tt-brand {
@@ -258,7 +193,7 @@ export default function LoginPage() {
               .tt-logo-mark-wrap {
                 position: absolute;
                 top: 0;
-                left: 62.5px;
+                left: 63px;
                 transform: translate3d(0, 0, 0);
                 transition: transform 480ms cubic-bezier(0.2, 0.8, 0.2, 1);
                 will-change: transform;
@@ -282,7 +217,7 @@ export default function LoginPage() {
 
               .tt-logo-text {
                 position: absolute;
-                left: 139px;
+                left: 50%;
                 top: 50%;
                 transform: translate3d(0, -50%, 0);
                 height: 30px;
@@ -309,10 +244,6 @@ export default function LoginPage() {
               }
 
               @media (prefers-reduced-motion: reduce) {
-                .tt-logo-stage {
-                  transition: none !important;
-                  transform: translate3d(0, 0, 0) !important;
-                }
                 .tt-logo-text {
                   transition: none !important;
                   opacity: 1 !important;
