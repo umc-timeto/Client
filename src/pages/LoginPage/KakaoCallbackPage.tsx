@@ -12,6 +12,7 @@ export default function KakaoCallbackPage() {
 
   useEffect(() => {
     const code = params.get("code");
+    console.log("받은 인가코드:", code);
 
     if (ranRef.current && lastCodeRef.current === code) return;
     ranRef.current = true;
