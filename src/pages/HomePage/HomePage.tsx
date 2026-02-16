@@ -1,3 +1,4 @@
+//C:\Users\tndus\Client\src\pages\HomePage\HomePage.tsx
 import { useEffect, useState } from "react";
 import { loadGoals, type GoalItem } from "./mock";
 
@@ -24,11 +25,8 @@ export default function HomePage() {
             >
               {/*목표 색상 표시*/}
               <div className="flex items-center gap-3">
-                <div
-                  className="h-4 w-4 rounded-full"
-                  style={{ backgroundColor: g.color }}
-                />
-                <div className="body-16-medium text-gray-700">{g.title}</div>
+                <div className="h-4 w-4 rounded-full" style={{ backgroundColor: g.color }} />
+                <div className="body-16-medium text-gray-700">{g.name}</div>
               </div>
 
               {/*우측 정보 영역:추후 task 합계/폴더 개수 등 연결*/}

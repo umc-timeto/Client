@@ -30,38 +30,70 @@ const STORAGE_KEY = "timeto_goals";
 //STEP3 헤더/라인/아이콘 강조 컬러
 const ACCENT_YELLOW = "var(--color-yellow-normal)";
 
-//STEP4 API 요청 바디 타입과 동일하게 맞춤
+//STEP4 API 요청 바디 타입
 type GoalCreateBody = {
   name: string;
   color: string;
 };
 
-//STEP5 목표 이름 검증(공백 포함 최대 20자, 공백만은 불가)
+//STEP5 로컬 저장 타입
+type GoalLocalItem = {
+  id: string;
+  name: string;
+  color: string;
+};
+
+//STEP6 목표 이름 검증(공백 포함 최대 20자, 공백만은 불가)
 function isValidGoalTitle(v: string) {
   if (v.length > 20) return false;
   if (v.trim().length === 0) return false;
   return true;
 }
 
-//STEP6 로컬 저장 데이터 로드
-function loadGoals(): GoalCreateBody[] {
+//STEP7 로컬 저장 데이터 로드(구버전 title/color도 호환)
+function loadGoals(): GoalLocalItem[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed as GoalCreateBody[];
+
+    return parsed
+      .map((it: any, idx: number) => {
+        const name =
+          typeof it?.name === "string"
+            ? it.name
+            : typeof it?.title === "string"
+              ? it.title
+              : "";
+        const color =
+          typeof it?.color === "string"
+            ? it.color
+            : typeof it?.colorHex === "string"
+              ? it.colorHex
+              : "";
+        const id =
+          typeof it?.id === "string" && it.id.length > 0
+            ? it.id
+            : typeof crypto !== "undefined"
+              ? crypto.randomUUID()
+              : `${Date.now()}-${idx}`;
+
+        if (!name || !color) return null;
+        return { id, name, color } as GoalLocalItem;
+      })
+      .filter(Boolean) as GoalLocalItem[];
   } catch {
     return [];
   }
 }
 
-//STEP7 로컬 저장 데이터 세이브
-function saveGoals(next: GoalCreateBody[]) {
+//STEP8 로컬 저장 데이터 세이브
+function saveGoals(next: GoalLocalItem[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
 }
 
-//STEP8 아래 화살표 아이콘:stroke를 currentColor로 고정
+//STEP9 아래 화살표 아이콘:stroke를 currentColor로 고정
 function ChevronDown() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
@@ -157,18 +189,25 @@ export default function GoalPage() {
   const handleSave = useCallback(async () => {
     if (!canSave) return;
 
-    //STEP6-1 API 요청 바디와 동일한 형태로 저장
+    //STEP6-1 API 요청 바디 생성
     const body = buildGoalCreateBody();
 
-    //STEP6-2 localStorage 저장
+    //STEP6-2 로컬 저장 형태
+    const localItem: GoalLocalItem = {
+      id: crypto.randomUUID(),
+      name: body.name,
+      color: body.color,
+    };
+
+    //STEP6-3 localStorage 저장
     const prev = loadGoals();
-    const next = [...prev, body];
+    const next = [...prev, localItem];
     saveGoals(next);
 
-    //STEP6-3 화면 이동
+    //STEP6-4 화면 이동
     navigate("/home");
 
-    //STEP6-4 나중에 API 연결 시 여기만 교체
+    //STEP6-5 나중에 API 연결 시 여기만 교체
     //await addGoal(body);
   }, [canSave, buildGoalCreateBody, navigate]);
 
@@ -245,15 +284,15 @@ export default function GoalPage() {
           {/*모달 배경:헤더 포함 전체 덮기*/}
           <button
             type="button"
-            className="fixed inset-0 z-999 bg-black/20"
+            className="fixed inset-0 z-[999] bg-black/20"
             aria-label="close color modal"
             onClick={() => setColorModalOpen(false)}
           />
 
           {/*모달 바텀시트:가운데 정렬 고정 크기*/}
-          <div className="fixed inset-x-0 bottom-0 z-1000 flex justify-center">
+          <div className="fixed inset-x-0 bottom-0 z-[1000] flex justify-center">
             {/*모달 컨테이너:피그마 고정 크기*/}
-            <div className="mb-6 h-49 w-85.75 rounded-2xl bg-white p-5 shadow-lg">
+            <div className="mb-6 rounded-2xl bg-white p-5 shadow-lg">
               {/*모달 헤더*/}
               <div className="flex items-center justify-between">
                 <div className="title-16-semibold text-gray-700">색상 선택</div>
