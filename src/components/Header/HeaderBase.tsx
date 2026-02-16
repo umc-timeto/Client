@@ -1,7 +1,7 @@
 import React from "react";
 
 export type HeaderBaseProps = {
-  title: string;
+  title: React.ReactNode;
   left?: React.ReactNode;
   right?: React.ReactNode;
   className?: string;
@@ -9,7 +9,8 @@ export type HeaderBaseProps = {
 
 export function HeaderBase({ title, left, right }: HeaderBaseProps) {
   return (
-    <header className={`sticky top-0 mt-17.5 z-10 flex items-center justify-between px-5`}>
+    <header className={`sticky top-0 pt-17.5 z-50 flex items-center justify-between pl-[13.33px] pr-5 bg-white`}>
+      <div className="h-[env(safe-area-inset-top)]" />
       <div className="flex flex-none items-center justify-start" aria-label="header-left">
         {left}
       </div>
@@ -30,7 +31,7 @@ export function HeaderBase({ title, left, right }: HeaderBaseProps) {
 
 export function StatusHeaderBase({ title, left, right }: HeaderBaseProps) {
   return (
-    <div className={`sticky top-0 mt-17.5 z-10`}>
+    <div className={`sticky top-0 pt-17.5 z-50 bg-white`}>
       <div className="h-[env(safe-area-inset-top)]" />
       <div className="flex h-14 items-center justify-between px-4">
         <div className="flex flex-none items-center justify-start" aria-label="header-left">

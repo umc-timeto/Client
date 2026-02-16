@@ -101,7 +101,7 @@
   --color-gray-200: #EBEBEB;
   --color-gray-300: #A5A5A5;
   --color-gray-700: #0F0F0F;
-  --color-red-delete: #ED0505;
+  --color-red-delete: #FF4545;
 
   --color-green-light: #eaf7f6;
   --color-green-light-hover: #dff3f2;
@@ -114,16 +114,16 @@
   --color-green-dark-active: #124e4b;
   --color-green-darker: #0e3d3a;
 
-  --color-orange-light: #fff5eb;
-  --color-orange-light-hover: #fff0e0;
-  --color-orange-light-active: #fee0bf;
-  --color-orange-normal: #fc9c32;
-  --color-orange-normal-hover: #e38c2d;
-  --color-orange-normal-active: #ca7d28;
-  --color-orange-dark: #bd7526;
-  --color-orange-dark-hover: #975e1e;
-  --color-orange-dark-active: #714616;
-  --color-orange-darker: #583712;
+  --color-yellow-light: #fef4e8;
+  --color-yellow-light-hover: #feefdd;
+  --color-yellow-light-active: #fddeb9;
+  --color-yellow-normal: #f7941d;
+  --color-yellow-normal-hover: #de851a;
+  --color-yellow-normal-active: #c67617;
+  --color-yellow-dark: #b96f16;
+  --color-yellow-dark-hover: #945911;
+  --color-yellow-dark-active: #6f430d;
+  --color-yellow-darker: #56340a;
 
   --color-grey-light: #ebebeb;
   --color-grey-light-hover: #e1e1e1;
@@ -135,6 +135,36 @@
   --color-grey-dark-hover: #232323;
   --color-grey-dark-active: #1a1a1a;
   --color-grey-darker: #141414;
+
+  --color-folder-red-nomal: #FF8373;
+  --color-folder-red-light: #FFECEA;
+
+  --color-folder-orange-nomal: #F6AE14;
+  --color-folder-orange-light: #FEF3DC;
+
+  --color-folder-yellow-nomal: #FFE240;
+  --color-folder-yellow-light: #FFFBE2;
+
+  --color-folder-lightGreen-nomal: #D5F05F;
+  --color-folder-lightGreen-light: #F9FDE7;
+
+  --color-folder-green-nomal: #75C7AD;
+  --color-folder-green-light: #EAF7F3;
+
+  --color-folder-cyan-nomal: #8AE6EE;
+  --color-folder-cyan-light: #EDFBFC;
+
+  --color-folder-skyBlue-nomal: #6FB7FF;
+  --color-folder-skyBlue-light: #E9F4FF;
+
+  --color-folder-blue-nomal: #638FFF;
+  --color-folder-blue-light: #E8EEFF;
+
+  --color-folder-purple-nomal: #C58BFF;
+  --color-folder-purple-light: #F7EDFF;
+
+  --color-folder-pink-nomal: #FF9FD4;
+  --color-folder-pink-light: #FFF1F9;
 }
 
 @utility no-scrollbar {
@@ -176,4 +206,36 @@
 
 body {
   font-family: var(--font-pretendard);
+}
+
+:root {
+    --color-folder-red-nomal: #FF8373;
+  --color-folder-red-light: #FFECEA;
+
+  --color-folder-orange-nomal: #F6AE14;
+  --color-folder-orange-light: #FEF3DC;
+
+  --color-folder-yellow-nomal: #FFE240;
+  --color-folder-yellow-light: #FFFBE2;
+
+  --color-folder-lightGreen-nomal: #D5F05F;
+  --color-folder-lightGreen-light: #F9FDE7;
+
+  --color-folder-green-nomal: #75C7AD;
+  --color-folder-green-light: #EAF7F3;
+
+  --color-folder-cyan-nomal: #8AE6EE;
+  --color-folder-cyan-light: #EDFBFC;
+
+  --color-folder-skyBlue-nomal: #6FB7FF;
+  --color-folder-skyBlue-light: #E9F4FF;
+
+  --color-folder-blue-nomal: #638FFF;
+  --color-folder-blue-light: #E8EEFF;
+
+  --color-folder-purple-nomal: #C58BFF;
+  --color-folder-purple-light: #F7EDFF;
+
+  --color-folder-pink-nomal: #FF9FD4;
+  --color-folder-pink-light: #FFF1F9;
 }
