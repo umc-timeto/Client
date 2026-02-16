@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+//C:\Users\tndus\Client\src\pages\GoalPage\GoalPage.tsx
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import UnderlineBox from "@/components/UnderlineBox";
 import { useHeaderActions } from "@/contexts/HeaderActionContext";
@@ -23,38 +24,51 @@ const GOAL_COLORS: GoalColor[] = [
   { key: "cyan", name: "사이언", hex: "#8AE6EE" },
 ];
 
+//STEP2 localStorage 키
 const STORAGE_KEY = "timeto_goals";
 
-//STEP2 목표 이름 검증(공백 포함 최대 20자, 공백만은 불가)
+//STEP3 헤더/라인/아이콘 강조 컬러
+const ACCENT_YELLOW = "var(--color-yellow-normal)";
+
+//STEP4 API 요청 바디 타입과 동일하게 맞춤
+type GoalCreateBody = {
+  name: string;
+  color: string;
+};
+
+//STEP5 목표 이름 검증(공백 포함 최대 20자, 공백만은 불가)
 function isValidGoalTitle(v: string) {
   if (v.length > 20) return false;
   if (v.trim().length === 0) return false;
   return true;
 }
 
-function loadGoals() {
+//STEP6 로컬 저장 데이터 로드
+function loadGoals(): GoalCreateBody[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed;
+    return parsed as GoalCreateBody[];
   } catch {
     return [];
   }
 }
 
-function saveGoals(next: any[]) {
+//STEP7 로컬 저장 데이터 세이브
+function saveGoals(next: GoalCreateBody[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
 }
 
+//STEP8 아래 화살표 아이콘:stroke를 currentColor로 고정
 function ChevronDown() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
       <path
         d="M6 9l6 6 6-6"
         fill="none"
-        stroke="#A5A5A5"
+        stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -85,14 +99,28 @@ export default function GoalPage() {
 
   const colorActive = color !== null;
 
-  //STEP3 입력 시작 시점에 저장 버튼 표시(피그마:포커스 들어가면 뜸)
+  //STEP3 입력 시작 시점에 저장 버튼 표시
   const showSave = titleFocused || titleActive || colorModalOpen || colorActive;
 
   //STEP4 이름+색상 모두 유효하면 저장 활성화
   const canSave = titleValid && colorActive;
 
+  //STEP5 색상 입력 라인/아이콘 활성 조건
+  const colorFieldFocused = colorModalOpen && !colorActive;
+  const chevronActive = colorModalOpen || colorActive;
+
   //========================
-  //STEP5 헤더(AppHeaderAuto)가 참조하는 showSave/canSave 쿼리 반영
+  //STEP3 API 요청 바디 생성
+  //========================
+  const buildGoalCreateBody = useCallback((): GoalCreateBody => {
+    return {
+      name: title.trim(),
+      color: color?.hex ?? "",
+    };
+  }, [title, color]);
+
+  //========================
+  //STEP4 헤더(AppHeaderAuto)가 참조하는 showSave/canSave 쿼리 반영
   //========================
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
@@ -110,7 +138,7 @@ export default function GoalPage() {
   }, [showSave, canSave]);
 
   //========================
-  //STEP6 모달 열릴 때 바디 스크롤 잠금
+  //STEP5 모달 열릴 때 바디 스크롤 잠금
   //========================
   useEffect(() => {
     if (!colorModalOpen) return;
@@ -124,34 +152,33 @@ export default function GoalPage() {
   }, [colorModalOpen]);
 
   //========================
-  //STEP7 저장 동작(localStorage mock)
+  //STEP6 저장 동작(localStorage mock)
   //========================
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!canSave) return;
 
-    const prev = loadGoals();
-    const next = [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        title: title.trim(),
-        colorHex: color!.hex,
-        colorName: color!.name,
-      },
-    ];
+    //STEP6-1 API 요청 바디와 동일한 형태로 저장
+    const body = buildGoalCreateBody();
 
+    //STEP6-2 localStorage 저장
+    const prev = loadGoals();
+    const next = [...prev, body];
     saveGoals(next);
+
+    //STEP6-3 화면 이동
     navigate("/home");
-  };
+
+    //STEP6-4 나중에 API 연결 시 여기만 교체
+    //await addGoal(body);
+  }, [canSave, buildGoalCreateBody, navigate]);
 
   //========================
-  //STEP8 헤더 "저장" 버튼 동작 등록
+  //STEP7 헤더 "저장" 버튼 동작 등록
   //========================
   useEffect(() => {
     setOnComplete(() => handleSave);
     return () => setOnComplete(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canSave, title, color]);
+  }, [setOnComplete, handleSave]);
 
   //========================
   //STEP 1: 목표 생성 UI
@@ -177,7 +204,7 @@ export default function GoalPage() {
           mode="input"
           active={titleActive}
           focused={titleFocused && !titleActive}
-          accentColor={ "var(--color-yellow-normal)" }
+          accentColor={ACCENT_YELLOW}
           inputValue={title}
           onInputChange={(v) => setTitle(v.slice(0, 20))}
           onInputFocus={() => setTitleFocused(true)}
@@ -191,8 +218,8 @@ export default function GoalPage() {
           label="색상"
           mode="button"
           active={colorActive}
-          focused={colorModalOpen && !colorActive}
-          accentColor={"var(--color-yellow-normal)"}
+          focused={colorFieldFocused}
+          accentColor={ACCENT_YELLOW}
           valueText={color ? color.name : ""}
           placeholder=" "
           onClick={() => setColorModalOpen(true)}
@@ -201,24 +228,32 @@ export default function GoalPage() {
               <div className="h-5 w-5 rounded-full" style={{ backgroundColor: color.hex }} />
             ) : null
           }
-          rightSlot={<ChevronDown />}
+          rightSlot={
+            <div
+              className={chevronActive ? "" : "text-gray-400"}
+              style={chevronActive ? { color: ACCENT_YELLOW } : undefined}
+            >
+              <ChevronDown />
+            </div>
+          }
         />
       </div>
 
       {/*색상 선택 모달*/}
       {colorModalOpen ? (
         <>
-          {/*모달 배경:외부 클릭 시 닫힘*/}
+          {/*모달 배경:헤더 포함 전체 덮기*/}
           <button
             type="button"
-            className="fixed inset-0 z-40 bg-black/20"
+            className="fixed inset-0 z-999 bg-black/20"
             aria-label="close color modal"
             onClick={() => setColorModalOpen(false)}
           />
 
-          {/*모달 바텀시트*/}
-          <div className="fixed inset-x-0 bottom-0 z-50">
-            <div className="mx-5 mb-6 rounded-2xl bg-white p-5 shadow-lg">
+          {/*모달 바텀시트:가운데 정렬 고정 크기*/}
+          <div className="fixed inset-x-0 bottom-0 z-1000 flex justify-center">
+            {/*모달 컨테이너:피그마 고정 크기*/}
+            <div className="mb-6 h-49 w-85.75 rounded-2xl bg-white p-5 shadow-lg">
               {/*모달 헤더*/}
               <div className="flex items-center justify-between">
                 <div className="title-16-semibold text-gray-700">색상 선택</div>
