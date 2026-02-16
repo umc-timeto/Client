@@ -62,7 +62,7 @@ export default function HomePage() {
     navigate("/folder/select");
   };
 
-  const onClickEditGoal = (g: GoalItem) => {
+  const onClickEditGoal = (_g: GoalItem) => {
     //GoalPage가 수정 모드 아직 없으니까, 일단 "새 목표 추가"로 이동만 해둠.
     //수정 모드 붙일 때: navigate("/goal?mode=edit", { state: { goalId: g.id, title: g.title, color: g.color } })
     setOpenMenu(null);

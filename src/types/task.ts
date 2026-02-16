@@ -16,17 +16,18 @@ export type TaskCreateInput = {
   priority: TaskPriority;
 };
 
-type Goal = {
-  goalId: string;
-  title: string; //0~20자
-  color: string; //예: "#FF6B6B"
-  taskTotalCount: number; //목표 내 전체 task 개수
-};
 
-type Folder = {
-  folderId: string;
-  goalId: string;
-  title: string;
-  taskCount: number;
-  order: number; //드래그 정렬용
-};
+// type Goal = {
+//   goalId: string;
+//   title: string; //0~20자
+//   color: string; //예: "#FF6B6B"
+//   taskTotalCount: number; //목표 내 전체 task 개수
+// };
+
+// type Folder = {
+//   folderId: string;
+//   goalId: string;
+//   title: string;
+//   taskCount: number;
+//   order: number; //드래그 정렬용
+// };
