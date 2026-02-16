@@ -1,4 +1,6 @@
-//C:\Users\tndus\Client\src\pages\HomePage\mock.ts
+import { deleteFoldersByGoal } from "@/api/folderApi"; //추가
+
+
 export type GoalItem = {
   id: string;
   title: string; //UI 표시용
@@ -81,6 +83,9 @@ export function deleteGoal(goalId: string) {
   const prev = loadGoals();
   const next = prev.filter((g) => g.id !== goalId);
   saveGoals(next);
+
+  //하위 폴더 전부 삭제
+  deleteFoldersByGoal(goalId);
 }
 
 // -----------------------------

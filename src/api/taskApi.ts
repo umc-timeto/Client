@@ -1,9 +1,6 @@
 import type { Task, TaskCreateInput } from "@/types/task";
-//import { MOCK_FOLDER_ID } from "@/pages/TaskPage/mock";
-//import { MOCK_FOLDER_ID } from "@/pages/TaskPage/mock";
+import { bumpTodoCount } from "@/api/folderApi"; //추가
 
-//폴더 선택 기능 붙기 전 임시 기본값(지금은 전부 f1로 들어감)
-const DEFAULT_FOLDER_ID = "f1";
 //폴더 선택 기능 붙기 전 임시 기본값(지금은 전부 f1로 들어감)
 const DEFAULT_FOLDER_ID = "f1";
 const STORAGE_KEY = "timeto.tasks";
@@ -54,6 +51,9 @@ export async function createTask(input: TaskCreateInput): Promise<Task> {
 
   tasks.push(newTask); //할일추가하면 하단에 쌓여야함
   saveTasks(tasks);
+
+  //todoCount +1
+  bumpTodoCount(newTask.folderId, +1);
 
   console.log("📦 createTask payload:", input); //저장 됐는지 확인용
 
@@ -112,10 +112,16 @@ export async function updateTask(
 //========================
 export async function deleteTask(taskId: string): Promise<boolean> {
   const tasks = loadTasks();
+  const target = tasks.find((t) => t.id === taskId) ?? null;
+
   const next = tasks.filter((t) => t.id !== taskId);
   if (next.length === tasks.length) return false;
 
   saveTasks(next);
+
+  //todoCount -1
+  if (target) bumpTodoCount(target.folderId, -1);
+
   await new Promise((r) => setTimeout(r, 120));
   return true;
 }

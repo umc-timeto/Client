@@ -106,8 +106,12 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu }: AppHea
             <MenuSvg className="h-7 w-7" />
           </HeaderIconButton>
         }
+        //기존: onClick={() => navigate("/goal")}
         right={
-          <HeaderIconButton ariaLabel="add" onClick={requestHomeAddOpen}>
+          <HeaderIconButton
+            ariaLabel="add"
+            onClick={() => window.dispatchEvent(new CustomEvent("home:add"))}
+          >
             <AddSvg className="h-7 w-7" />
           </HeaderIconButton>
         }
@@ -151,18 +155,32 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu }: AppHea
   }
 
 
-  if (path === "/folder/select") {
-    return (
-      <HeaderBase
-        title="목표 선택"
-        left={
-          <HeaderIconButton ariaLabel="close" onClick={goBack}>            <CloseSvg className="h-7 w-7" />
-          </HeaderIconButton>
-        }
-        right={<RightTextButton label=" " onClick={noop} />}
-      />
-    );
-  }
+if (path === "/folder/select") {
+  const stepRaw = searchParams.get("step");
+  const step = Number(stepRaw ?? "1");
+  const safeStep = step === 2 ? 2 : 1;
+
+  const showSave = safeStep === 2;
+  const canSave = getQueryFlag("canSave");
+
+  return (
+    <HeaderBase
+      title={safeStep === 2 ? "폴더 추가" : "목표 선택"}
+      left={
+        <HeaderIconButton ariaLabel="close" onClick={goBack}>
+          <CloseSvg className="h-7.5 w-7.5" />
+        </HeaderIconButton>
+      }
+      right={
+        showSave ? (
+          <RightTextButton label="저장" onClick={complete} disabled={!canSave} />
+        ) : (
+          <RightTextButton label=" " onClick={noop} />
+        )
+      }
+    />
+  );
+}
 
   if (path === "/task") {
     const canNext = getQueryFlag("canNext");
