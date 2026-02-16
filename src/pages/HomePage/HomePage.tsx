@@ -181,12 +181,12 @@ export default function HomePage() {
         <>
           <button
             type="button"
-            className="fixed inset-0 z-40 bg-black/20"
+            className="fixed inset-0 z-60 bg-black/20"
             aria-label="close add sheet"
             onClick={() => setAddSheetOpen(false)}
           />
 
-          <div className="fixed inset-x-0 bottom-0 z-50 flex justify-center px-5 pb-6">
+          <div className="fixed inset-x-0 bottom-0 z-70 flex justify-center px-5 pb-6">
             <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-lg">
               <div className="flex items-center justify-between">
                 <div className="title-16-semibold text-grey-dark">새롭게 추가</div>
