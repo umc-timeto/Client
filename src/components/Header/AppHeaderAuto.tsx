@@ -1,4 +1,5 @@
 import { useLocation, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
+import { useTimeBlockCreateStore } from "@/constants/timeBlockCreateStore";
 
 import AddSvg from "@/assets/add.svg?react";
 import CloseSvg from "@/assets/close.svg?react";
@@ -31,6 +32,8 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu}: AppHead
 
   const path = location.pathname;
 
+  const pickedCreateTask = useTimeBlockCreateStore((s) => s.pickedTask);
+
   const [searchParams, setSearchParams] = useSearchParams();
   const stepRaw = searchParams.get("step");
   const step = Number(stepRaw ?? "1");
@@ -51,6 +54,10 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu}: AppHead
 
   const goBack = () => navigate(-1);
 
+  const requestTimeBlockCreateSave = () => {
+    window.dispatchEvent(new CustomEvent("timeblockCreate:save"));
+  };
+
   const RightTextButton = ({
     label,
     onClick,
@@ -62,12 +69,8 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu}: AppHead
   }) => (
     <button
       type="button"
-      className={`px-2 text-title-20 font-normal ${
-        disabled
-          ? "text-grey-light-active"
-          : label === "삭제"
-          ? "text-[#FF4545]"
-          : "text-yellow-normal"
+      className={`text-[20px] font-normal ${
+        disabled ? "text-grey-light-active" : "text-yellow-normal"
       }`}
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
@@ -280,9 +283,52 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu}: AppHead
           </HeaderIconButton>
         }
         right={
-          <HeaderIconButton ariaLabel="add" onClick={() => navigate("/timeblock/create") }>
+          <HeaderIconButton ariaLabel="add" onClick={() => navigate("/timeblock/create/goal")}>
             <AddSvg className="h-6.25 w-6.25" />
           </HeaderIconButton>
+        }
+      />
+    );
+  }
+
+  if (path === "/timeblock/create/goal" || path === "/timeblock/create/folder") {
+    return (
+      <HeaderBase
+        title="타임 블록 추가"
+        left={
+          <HeaderIconButton ariaLabel="close" onClick={goBack}>
+            <CloseSvg className="h-7.5 w-7.5" />
+          </HeaderIconButton>
+        }
+        right={
+          <HeaderIconButton ariaLabel="spacer" onClick={noop}>
+            <MenuSvg className="h-7 w-7 opacity-0" />
+          </HeaderIconButton>
+        }
+      />
+    );
+  }
+
+  if (path === "/timeblock/create/task") {
+    const canSave = Boolean(pickedCreateTask);
+
+    return (
+      <HeaderBase
+        title="타임 블록 추가"
+        left={
+          <HeaderIconButton ariaLabel="close" onClick={goBack}>
+            <CloseSvg className="h-7.5 w-7.5" />
+          </HeaderIconButton>
+        }
+        right={
+          <RightTextButton
+            label="저장"
+            onClick={() => {
+              requestTimeBlockCreateSave();
+              navigate("/timeblock");
+            }}
+            disabled={!canSave}
+          />
         }
       />
     );
