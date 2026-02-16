@@ -82,3 +82,33 @@ export function deleteGoal(goalId: string) {
   const next = prev.filter((g) => g.id !== goalId);
   saveGoals(next);
 }
+
+// -----------------------------
+// Folder Dummy Data
+// -----------------------------
+
+export type FolderItem = {
+  id: string;
+  goalId: string;   // 어떤 목표에 속하는지
+  name: string;
+};
+
+export function loadDummyFolders(): FolderItem[] {
+  return [
+    {
+      id: "folder-1",
+      goalId: "goal-1",
+      name: "기초 개념 정리",
+    },
+    {
+      id: "folder-2",
+      goalId: "goal-1",
+      name: "실전 문제 풀이",
+    },
+    {
+      id: "folder-3",
+      goalId: "goal-2",
+      name: "상체 운동",
+    },
+  ];
+}
