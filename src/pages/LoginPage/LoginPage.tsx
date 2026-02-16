@@ -166,7 +166,7 @@ export default function LoginPage() {
             type="button"
             className={`absolute z-20 pointer-events-auto left-0 right-0 bottom-17 w-full rounded-md bg-kakao-bg disabled:opacity-50 py-3.75 tt-cta ${ctaIn ? "tt-cta--in" : ""}`}
             onClick={onClickKakaoLogin}
-            disabled={!canLogin || isLoading}
+            // disabled={!canLogin || isLoading}
           >
             <div className="flex items-center justify-center gap-2">
               <img src={kakaoIcon} alt="카카오 아이콘" className="h-4.5 w-4.5" />

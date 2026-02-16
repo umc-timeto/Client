@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 import type { RouteObject } from "react-router-dom";
 
 import RootLayout from "@/layouts/RootLayout";
@@ -23,7 +23,8 @@ import {
 const publicChildren: RouteObject[] = [
   { index: true, element: <LoginPage /> },
   { path: "login", element: <LoginPage /> },
-  { path: "auth/callback/kakao", element: <KakaoCallbackPage /> },
+
+  { path: "/auth/kakao/callback", element: <KakaoCallbackPage /> },
 ];
 
 const protectedChildren: RouteObject[] = [
