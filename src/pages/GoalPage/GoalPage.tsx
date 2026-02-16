@@ -24,7 +24,6 @@ const GOAL_COLORS: GoalColor[] = [
 ];
 
 const STORAGE_KEY = "timeto_goals";
-const ACCENT_ORANGE = "#F7941D";
 
 //STEP2 목표 이름 검증(공백 포함 최대 20자, 공백만은 불가)
 function isValidGoalTitle(v: string) {
@@ -178,7 +177,7 @@ export default function GoalPage() {
           mode="input"
           active={titleActive}
           focused={titleFocused && !titleActive}
-          accentColor={ACCENT_ORANGE}
+          accentColor={ "var(--color-yellow-normal)" }
           inputValue={title}
           onInputChange={(v) => setTitle(v.slice(0, 20))}
           onInputFocus={() => setTitleFocused(true)}
@@ -193,7 +192,7 @@ export default function GoalPage() {
           mode="button"
           active={colorActive}
           focused={colorModalOpen && !colorActive}
-          accentColor={ACCENT_ORANGE}
+          accentColor={"var(--color-yellow-normal)"}
           valueText={color ? color.name : ""}
           placeholder=" "
           onClick={() => setColorModalOpen(true)}
