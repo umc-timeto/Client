@@ -12,14 +12,19 @@ import {
   FolderPage,
   FolderSelectPage,
   TaskPage,
+  TimeBlockCreateFolderPage,
+  TimeBlockCreateGoalPage,
+  TimeBlockCreateTaskPage,
   TimeBlockPage,
   MyLogPage,
+  SurveyPage,
 } from "@/pages";
 
 const publicChildren: RouteObject[] = [
   { index: true, element: <LoginPage /> },
   { path: "login", element: <LoginPage /> },
-  { path: "auth/callback/kakao", element: <KakaoCallbackPage /> },
+
+  { path: "/auth/kakao/callback", element: <KakaoCallbackPage /> },
 ];
 
 const protectedChildren: RouteObject[] = [
@@ -29,7 +34,11 @@ const protectedChildren: RouteObject[] = [
   { path: "folder/select", element: <FolderSelectPage /> },
   { path: "task", element: <TaskPage /> },
   { path: "timeblock", element: <TimeBlockPage /> },
+  { path: "timeblock/create/goal", element: <TimeBlockCreateGoalPage /> },
+  { path: "timeblock/create/folder", element: <TimeBlockCreateFolderPage /> },
+  { path: "timeblock/create/task", element: <TimeBlockCreateTaskPage /> },
   { path: "mylog", element: <MyLogPage /> },
+  { path: "survey", element: <SurveyPage /> },
 ];
 
 const routes: RouteObject[] = [

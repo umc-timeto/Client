@@ -1,6 +1,9 @@
 import type { Task, TaskCreateInput } from "@/types/task";
 //import { MOCK_FOLDER_ID } from "@/pages/TaskPage/mock";
+//import { MOCK_FOLDER_ID } from "@/pages/TaskPage/mock";
 
+//폴더 선택 기능 붙기 전 임시 기본값(지금은 전부 f1로 들어감)
+const DEFAULT_FOLDER_ID = "f1";
 //폴더 선택 기능 붙기 전 임시 기본값(지금은 전부 f1로 들어감)
 const DEFAULT_FOLDER_ID = "f1";
 const STORAGE_KEY = "timeto.tasks";
@@ -116,4 +119,3 @@ export async function deleteTask(taskId: string): Promise<boolean> {
   await new Promise((r) => setTimeout(r, 120));
   return true;
 }
-
