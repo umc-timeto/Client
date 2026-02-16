@@ -1,6 +1,9 @@
 //C:\Users\tndus\Client\src\pages\HomePage\HomePage.tsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+
+import ConfirmModal from "@/components/ConfirmModal";
+import ActionMenu from "@/components/ActionMenu";
 
 import FlagSvg from "@/assets/flag.svg?react";
 import FlagDotSvg from "@/assets/flag_dot.svg?react";
@@ -22,8 +25,6 @@ export default function HomePage() {
 
   const [openMenu, setOpenMenu] = useState<OpenMenu | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<GoalItem | null>(null);
-
-  const menuRef = useRef<HTMLDivElement | null>(null);
 
   //초기 로드
   useEffect(() => {
@@ -48,21 +49,6 @@ export default function HomePage() {
       document.body.style.overflow = prev;
     };
   }, [addSheetOpen, deleteTarget]);
-
-  //메뉴 바깥 클릭 닫기
-  useEffect(() => {
-    if (!openMenu) return;
-
-    const onDown = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (!menuRef.current) return;
-      if (menuRef.current.contains(t)) return;
-      setOpenMenu(null);
-    };
-
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [openMenu]);
 
   const isEmpty = goals.length === 0;
 
@@ -131,31 +117,15 @@ export default function HomePage() {
                       <Menu2Svg className="h-7 w-7" />
                     </button>
 
-                    {/*수정/삭제 메뉴*/}
-                    {openMenu?.goalId === g.id ? (
-                      <div
-                        ref={menuRef}
-                        className="absolute right-0 top-8 z-50 overflow-hidden rounded-lg bg-white shadow-lg"
-                      >
-                        <button
-                          type="button"
-                          className="flex w-36 items-center justify-between px-4 py-3"
-                          onClick={() => onClickEditGoal(g)}
-                        >
-                          <span className="body-14-medium text-grey-dark">수정하기</span>
-                          <EditSvg className="h-4 w-4" />
-                        </button>
-
-                        <button
-                          type="button"
-                          className="flex w-36 items-center justify-between px-4 py-3"
-                          onClick={() => onClickDeleteGoal(g)}
-                        >
-                          <span className="body-14-medium text-red-delete">삭제하기</span>
-                          <DeleteSvg className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ) : null}
+                    {/*수정/삭제 메뉴(ActionMenu가 바깥 클릭 닫기 처리함)*/}
+                    <ActionMenu
+                      open={openMenu?.goalId === g.id}
+                      onClose={() => setOpenMenu(null)}
+                      onEdit={() => onClickEditGoal(g)}
+                      onDelete={() => onClickDeleteGoal(g)}
+                      EditIcon={<EditSvg className="h-4 w-4" />}
+                      DeleteIcon={<DeleteSvg className="h-4 w-4" />}
+                    />
                   </div>
                 </div>
 
@@ -163,7 +133,7 @@ export default function HomePage() {
                 <div className="mt-3 overflow-hidden rounded-lg" style={{ background: folderBg }}>
                   <button
                     type="button"
-                    className="flex w-full items-center gap-3 px-4 py-5 text-left"
+                    className="flex w-full items-center gap-3 px-4 py-5 text-left active:bg-black/5"
                     onClick={onClickAddFolder}
                   >
                     <span className="text-grey-light-active text-[18px] leading-none">+</span>
@@ -205,14 +175,14 @@ export default function HomePage() {
               <div className="mt-4 flex gap-3">
                 <button
                   type="button"
-                  className="flex-1 rounded-md border border-grey-light bg-white py-3 text-[14px] font-semibold text-grey-normal"
+                  className="flex-1 rounded-md border border-grey-light bg-white py-3 text-[14px] font-semibold text-grey-normal hover:bg-grey-light-hover active:bg-grey-light-active"
                   onClick={onClickAddGoal}
                 >
                   목표 추가
                 </button>
                 <button
                   type="button"
-                  className="flex-1 rounded-md border border-grey-light bg-white py-3 text-[14px] font-semibold text-grey-normal"
+                  className="flex-1 rounded-md border border-grey-light bg-white py-3 text-[14px] font-semibold text-grey-normal hover:bg-grey-light-hover active:bg-grey-light-active"
                   onClick={onClickAddFolder}
                 >
                   폴더 추가
@@ -224,42 +194,15 @@ export default function HomePage() {
       ) : null}
 
       {/*삭제 확인 모달*/}
-      {deleteTarget ? (
-        <>
-          <button
-            type="button"
-            className="fixed inset-0 z-50 bg-black/20"
-            aria-label="close delete modal"
-            onClick={() => setDeleteTarget(null)}
-          />
-
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-5">
-            <div className="w-full max-w-sm rounded-lg bg-white px-6 py-5">
-              <div className="text-center text-[16px] font-medium text-grey-dark">목표를 삭제하시겠어요?</div>
-              <div className="mt-2 text-center text-[13px] font-medium text-grey-light-active">
-                목표 내 폴더와 할 일도 삭제돼요
-              </div>
-
-              <div className="mt-5 flex justify-center gap-6">
-                <button
-                  type="button"
-                  className="h-9 w-16 text-[13px] font-medium text-grey-dark"
-                  onClick={() => setDeleteTarget(null)}
-                >
-                  취소
-                </button>
-                <button
-                  type="button"
-                  className="h-9 w-16 text-[13px] font-medium text-red-delete"
-                  onClick={confirmDelete}
-                >
-                  삭제
-                </button>
-              </div>
-            </div>
-          </div>
-        </>
-      ) : null}
+      <ConfirmModal
+        open={!!deleteTarget}
+        title="목표를 삭제하시겠어요?"
+        description="목표 내 폴더와 할 일도 삭제돼요"
+        cancelText="취소"
+        confirmText="삭제"
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }

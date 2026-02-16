@@ -284,13 +284,13 @@ export default function GoalPage() {
           {/*모달 배경:헤더 포함 전체 덮기*/}
           <button
             type="button"
-            className="fixed inset-0 z-[999] bg-black/20"
+            className="fixed inset-0 z-999 bg-black/20"
             aria-label="close color modal"
             onClick={() => setColorModalOpen(false)}
           />
 
           {/*모달 바텀시트:가운데 정렬 고정 크기*/}
-          <div className="fixed inset-x-0 bottom-0 z-[1000] flex justify-center">
+          <div className="fixed inset-x-0 bottom-0 z-1000 flex justify-center">
             {/*모달 컨테이너:피그마 고정 크기*/}
             <div className="mb-6 rounded-2xl bg-white p-5 shadow-lg">
               {/*모달 헤더*/}
