@@ -17,6 +17,7 @@ import {
   TimeBlockCreateTaskPage,
   TimeBlockPage,
   MyLogPage,
+  SurveyPage,
 } from "@/pages";
 
 const publicChildren: RouteObject[] = [
@@ -36,6 +37,7 @@ const protectedChildren: RouteObject[] = [
   { path: "timeblock/create/folder", element: <TimeBlockCreateFolderPage /> },
   { path: "timeblock/create/task", element: <TimeBlockCreateTaskPage /> },
   { path: "mylog", element: <MyLogPage /> },
+  { path: "survey", element: <SurveyPage /> },
 ];
 
 const routes: RouteObject[] = [

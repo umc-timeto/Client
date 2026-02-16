@@ -337,15 +337,50 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu}: AppHead
   if (path === "/mylog") {
     return (
       <StatusHeaderBase
-        title=""
+        title="나의 일지"
         left={
           <HeaderIconButton ariaLabel="menu" onClick={openDrawer}>
             <MenuSvg className="h-7 w-7" />
+          </HeaderIconButton>
+        }
+        right={
+          <HeaderIconButton ariaLabel="spacer" onClick={noop}>
+            <MenuSvg className="h-7 w-7 opacity-0" />
           </HeaderIconButton>
         }
       />
     );
   }
 
+  if (path === "/survey") {
+    const rawDate = searchParams.get("date");
+
+    const parseYmdSafe = (v: string | null) => {
+      if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+      const [y, m, d] = v.split("-").map(Number);
+      const dt = new Date(y, m - 1, d);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    };
+
+    const dt = parseYmdSafe(rawDate) ?? new Date();
+    const title = `${dt.getMonth() + 1}월 ${dt.getDate()}일`;
+
+    const requestDelete = () => {
+      window.dispatchEvent(new CustomEvent("survey:delete", { detail: { date: rawDate } }));
+    };
+
+    return (
+      <StatusHeaderBase
+        title={<div className="text-title-20 font-semibold text-grey-dark">{title}</div>}
+        left={
+          <HeaderIconButton ariaLabel="close" onClick={goBack}>
+            <CloseSvg className="h-7.5 w-7.5" />
+          </HeaderIconButton>
+        }
+        right={<RightTextButton label="삭제" onClick={requestDelete} />}
+      />
+    );
+  }
+  
   return <HeaderBase title="" />;
 }

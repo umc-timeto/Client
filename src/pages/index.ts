@@ -10,3 +10,4 @@ export { default as TimeBlockCreateGoalPage } from "./TimeBlockPage/TimeBlockCre
 export { default as TimeBlockCreateTaskPage } from "./TimeBlockPage/TimeBlockCreateTaskPage";
 export { default as TimeBlockPage } from "./TimeBlockPage/TimeBlockPage";
 export { default as MyLogPage } from "./MyLogPage/MyLogPage";
+export { default as SurveyPage } from "./MyLogPage/SurveyPage";

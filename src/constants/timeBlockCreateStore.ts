@@ -30,7 +30,7 @@ export type TaskItem = {
   id: string;
   title: string;
   folderId: string;
-  minutes?: number; // 예상 소요시간 등
+  minutes?: number;
   colorKey?: ColorKey;
   level?: TaskLevel;
 };
