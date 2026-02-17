@@ -17,6 +17,7 @@ type AuthState = {
 };
 
 const STORAGE_KEY = "timetto_auth_v1";
+const LOCAL_TOKEN_KEY = "accessToken";
 
 export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
@@ -31,6 +32,9 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: AuthUser;
         accessToken: string;
       };
+
+      localStorage.setItem(LOCAL_TOKEN_KEY, parsed.accessToken);
+
       set({
         isAuthenticated: true,
         user: parsed.user,
@@ -38,16 +42,25 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
     } catch {
       sessionStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(LOCAL_TOKEN_KEY);
     }
   },
 
   loginMock: ({ user, accessToken }) => {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ user, accessToken }));
+    sessionStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ user, accessToken })
+    );
+
+    localStorage.setItem(LOCAL_TOKEN_KEY, accessToken);
+
     set({ isAuthenticated: true, user, accessToken });
   },
 
   logout: () => {
     sessionStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(LOCAL_TOKEN_KEY);
+
     set({ isAuthenticated: false, user: null, accessToken: null });
   },
 }));
