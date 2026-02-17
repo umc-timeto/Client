@@ -1,4 +1,3 @@
-//C:\Users\tndus\Client\src\pages\FolderPage\FolderPage.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import type { Task } from "@/types/task";

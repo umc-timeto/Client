@@ -1,4 +1,3 @@
-//C:\Users\tndus\Client\src\pages\GoalPage\GoalPage.tsx
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import UnderlineBox from "@/components/UnderlineBox";
