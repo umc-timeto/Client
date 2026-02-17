@@ -25,7 +25,7 @@ export default function Navbar({
   const displayEmail = userEmail && userEmail.trim().length > 0 ? userEmail : "email@example.com";
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-white">
+    <div className="fixed inset-0 z-500 flex flex-col bg-white">
       <header className="flex items-center justify-end px-5 pt-17.5">
         <button
           type="button"
