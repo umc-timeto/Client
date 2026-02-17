@@ -60,6 +60,9 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu }: AppHea
   const requestHomeAddOpen = () => {
     window.dispatchEvent(new CustomEvent("home:add"));
   };
+  const requestFolderMenuOpen = () => {
+    window.dispatchEvent(new CustomEvent("folder:menu"));
+  };
 
   const RightTextButton = ({
     label,
@@ -110,7 +113,7 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu }: AppHea
         right={
           <HeaderIconButton
             ariaLabel="add"
-            onClick={() => window.dispatchEvent(new CustomEvent("home:add"))}
+            onClick={requestHomeAddOpen}
           >
             <AddSvg className="h-7 w-7" />
           </HeaderIconButton>
@@ -146,7 +149,7 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu }: AppHea
           </HeaderIconButton>
         }
         right={
-          <HeaderIconButton ariaLabel="folder menu" onClick={openFolderMenu}>
+          <HeaderIconButton ariaLabel="folder menu" onClick={requestFolderMenuOpen}>
             <Menu2Svg className="h-7 w-7" />
           </HeaderIconButton>
         }
