@@ -23,7 +23,7 @@ type RootOutletContext = {
   openDrawer?: () => void;
 };
 
-export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu }: AppHeaderAutoProps) {
+export default function AppHeaderAuto({ onOpenDrawer }: AppHeaderAutoProps) {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -42,7 +42,6 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu }: AppHea
 
   const noop = () => {};
   const openDrawer = outletContext?.openDrawer ?? onOpenDrawer ?? noop;
-  const openFolderMenu = onOpenFolderMenu ?? noop;
   const complete = onComplete ?? noop;
 
   const setStep = (nextStep: number) => {

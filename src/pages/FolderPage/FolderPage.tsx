@@ -1,4 +1,3 @@
-//C:\Users\tndus\Client\src\pages\FolderPage\FolderPage.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import type { Task } from "@/types/task";
@@ -181,13 +180,12 @@ export default function FolderPage() {
   //STEP3 모달/모달류 열림 시 스크롤 잠금
   //========================
   useEffect(() => {
-    const anyOpen = !!openTaskId || deleteConfirmOpen || menuOpen;
-    if (!anyOpen) return;
+    const anyOpen = Boolean(openTaskId) || deleteConfirmOpen || menuOpen;
 
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    document.body.classList.toggle("no-scroll", anyOpen);
+
     return () => {
-      document.body.style.overflow = prev;
+      document.body.classList.remove("no-scroll");
     };
   }, [openTaskId, deleteConfirmOpen, menuOpen]);
 
@@ -368,7 +366,7 @@ export default function FolderPage() {
         EditIcon={<EditSvg className="h-4 w-4" />}
         DeleteIcon={<DeleteSvg className="h-4 w-4" />}
         //헤더 기준 우상단에 뜨는 느낌으로(대충) 맞춤. 필요하면 값만 바꾸면 됨.
-        className="right-5 top-[100px]"
+        className="right-5 top-25"
       />
 
       {/*========================
@@ -448,7 +446,7 @@ export default function FolderPage() {
                         {t.priority}
                       </span>
 
-                      <span className="flex h-5.5 w-[52px] items-center justify-center rounded-[3px] border border-[#00B1A6] text-[12px] font-semibold text-[#00B1A6]">
+                      <span className="flex h-5.5 w-13 items-center justify-center rounded-[3px] border border-[#00B1A6] text-[12px] font-semibold text-[#00B1A6]">
                         {formatDuration(t.durationMinutes)}
                       </span>
                     </div>
@@ -513,7 +511,7 @@ export default function FolderPage() {
                         {t.priority}
                       </span>
 
-                      <span className="flex h-5.5 w-[52px] items-center justify-center rounded-[3px] border border-[#F7941D] text-[12px] font-semibold text-[#F7941D]">
+                      <span className="flex h-5.5 w-13 items-center justify-center rounded-[3px] border border-[#F7941D] text-[12px] font-semibold text-[#F7941D]">
                         {formatDuration(t.durationMinutes)}
                       </span>
                     </div>

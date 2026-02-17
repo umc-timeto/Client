@@ -34,7 +34,7 @@ export function getFolderNormalVar(hex: string) {
 export function getFolderLightVar(hex: string) {
   const key = getFolderColorKeyByHex(hex);
   if (!key) return "rgba(0,0,0,0.03)";
-  return `var(--color-folder-${key}-light)`;
+  return `var(--color-folder-${key}-light-bg)`;
 }
 
 //로컬스토리지 데이터 로드(구버전{name,color}도 호환)

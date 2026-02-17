@@ -138,33 +138,43 @@
 
   --color-folder-red-nomal: #FF8373;
   --color-folder-red-light: #FFECEA;
+  --color-folder-red-light-bg: #ff83730d;
 
   --color-folder-orange-nomal: #F6AE14;
   --color-folder-orange-light: #FEF3DC;
-
+  --color-folder-orange-light-bg: #f6ae140d;
+  
   --color-folder-yellow-nomal: #FFE240;
   --color-folder-yellow-light: #FFFBE2;
+  --color-folder-yellow-light-bg: #ffe2400d;
 
   --color-folder-lightGreen-nomal: #D5F05F;
   --color-folder-lightGreen-light: #F9FDE7;
+  --color-folder-lightGreen-light-bg: #d5f05f0d;
 
   --color-folder-green-nomal: #75C7AD;
   --color-folder-green-light: #EAF7F3;
+  --color-folder-green-light-bg: #75c7ad0d;
 
   --color-folder-cyan-nomal: #8AE6EE;
   --color-folder-cyan-light: #EDFBFC;
+    --color-folder-cyan-light-bg: #8ae6ee0d;
 
   --color-folder-skyBlue-nomal: #6FB7FF;
   --color-folder-skyBlue-light: #E9F4FF;
+    --color-folder-skyBlue-light-bg: #6fb7ff0d;
 
   --color-folder-blue-nomal: #638FFF;
   --color-folder-blue-light: #E8EEFF;
+  --color-folder-blue-light-bg: #638fff0d;
 
   --color-folder-purple-nomal: #C58BFF;
   --color-folder-purple-light: #F7EDFF;
+  --color-folder-purple-light-bg: #c58bff0d;
 
   --color-folder-pink-nomal: #FF9FD4;
   --color-folder-pink-light: #FFF1F9;
+  --color-folder-pink-light-bg: #ff9fd40d;
 }
 
 @utility no-scrollbar {
@@ -174,6 +184,18 @@
 
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+/* 모달 열리면 배경 스크롤 잠금 */
+.no-scroll {
+  overflow: hidden;
+}
+/* 스크롤바 폭 변동 방지 */
+html {
+  scrollbar-gutter: stable;
+}
+/* 기본: 스크롤바 숨기되 스크롤은 가능 */
+html,body {
+  @apply no-scrollbar;
 }
 
 @utility title-20-semibold {
@@ -211,31 +233,41 @@ body {
 :root {
     --color-folder-red-nomal: #FF8373;
   --color-folder-red-light: #FFECEA;
+  --color-folder-red-light-bg: #ff83730d;
 
   --color-folder-orange-nomal: #F6AE14;
   --color-folder-orange-light: #FEF3DC;
+  --color-folder-orange-light-bg: #f6ae140d;
 
   --color-folder-yellow-nomal: #FFE240;
   --color-folder-yellow-light: #FFFBE2;
+  --color-folder-yellow-light-bg: #ffe2400d;
 
   --color-folder-lightGreen-nomal: #D5F05F;
   --color-folder-lightGreen-light: #F9FDE7;
+  --color-folder-lightGreen-light-bg: #d5f05f0d;
 
   --color-folder-green-nomal: #75C7AD;
   --color-folder-green-light: #EAF7F3;
+  --color-folder-green-light-bg: #75c7ad0d;
 
   --color-folder-cyan-nomal: #8AE6EE;
   --color-folder-cyan-light: #EDFBFC;
+  --color-folder-cyan-light-bg: #8ae6ee0d;
 
   --color-folder-skyBlue-nomal: #6FB7FF;
   --color-folder-skyBlue-light: #E9F4FF;
+  --color-folder-skyBlue-light-bg: #6fb7ff0d;
 
   --color-folder-blue-nomal: #638FFF;
   --color-folder-blue-light: #E8EEFF;
+  --color-folder-blue-light-bg: #638fff0d;
 
   --color-folder-purple-nomal: #C58BFF;
   --color-folder-purple-light: #F7EDFF;
+  --color-folder-purple-light-bg: #c58bff0d;
 
   --color-folder-pink-nomal: #FF9FD4;
   --color-folder-pink-light: #FFF1F9;
+  --color-folder-pink-light-bg: #ff9fd40d;
 }
