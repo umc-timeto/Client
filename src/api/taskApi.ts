@@ -1,5 +1,5 @@
 import type { Task, TaskCreateInput } from "@/types/task";
-import { bumpTodoCount } from "@/api/folderApi"; //추가
+import { setFolderTodoCount } from "@/api/folderApi";
 
 //폴더 선택 기능 붙기 전 임시 기본값(지금은 전부 f1로 들어감)
 const DEFAULT_FOLDER_ID = "f1";
@@ -23,6 +23,11 @@ function makeId() {
   return `t_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
+//STEP1 진행 개수 계산
+function getProgressCountByFolder(tasks: Task[], folderId: string) {
+  return tasks.filter((t) => t.folderId === folderId && !t.isDone).length;
+}
+
 //앱 최초 1회: mock.ts에 있는 초기 더미를 localStorage에 심어두기
 export function ensureMockSeed(initial: Task[]) {
   const cur = loadTasks();
@@ -35,31 +40,28 @@ export async function getTasksByFolder(folderId: string): Promise<Task[]> {
   return tasks.filter((t) => t.folderId === folderId);
 }
 
-
 //POST 모양새(나중에 fetch로 교체)
 export async function createTask(input: TaskCreateInput): Promise<Task> {
   const tasks = loadTasks();
 
+  const folderId = input.folderId ?? DEFAULT_FOLDER_ID;
+
   const newTask: Task = {
     id: makeId(),
-    folderId: input.folderId ?? DEFAULT_FOLDER_ID,
+    folderId,
     title: input.title,
     durationMinutes: input.durationMinutes,
     priority: input.priority,
     isDone: false,
   };
 
-  tasks.push(newTask); //할일추가하면 하단에 쌓여야함
+  tasks.push(newTask);
   saveTasks(tasks);
 
-  //todoCount +1
-  bumpTodoCount(newTask.folderId, +1);
+  //STEP2 진행 개수 덮어쓰기
+  setFolderTodoCount(folderId, getProgressCountByFolder(tasks, folderId));
 
-  console.log("📦 createTask payload:", input); //저장 됐는지 확인용
-
-  //네트워크 흉내(없어도 되는데, 동작 확인용)
   await new Promise((r) => setTimeout(r, 150));
-
   return newTask;
 }
 
@@ -73,10 +75,14 @@ export async function setTasksByFolder(folderId: string, next: Task[]): Promise<
   //STEP1 folderId 강제 정규화
   const normalized = next.map((t) => ({ ...t, folderId }));
 
-  saveTasks([...others, ...normalized]);
+  const merged = [...others, ...normalized];
+  saveTasks(merged);
+
+  //STEP2 진행 개수 덮어쓰기
+  setFolderTodoCount(folderId, getProgressCountByFolder(merged, folderId));
+
   await new Promise((r) => setTimeout(r, 80));
 }
-
 
 //========================
 //STEP 1: 단건 조회
@@ -89,7 +95,7 @@ export async function getTaskById(taskId: string): Promise<Task | null> {
 //========================
 //STEP 1: 수정
 //========================
-export async function updateTask(  
+export async function updateTask(
   taskId: string,
   patch: Partial<Omit<Task, "id" | "folderId">>
 ): Promise<Task | null> {
@@ -102,6 +108,9 @@ export async function updateTask(
 
   tasks[idx] = updated;
   saveTasks(tasks);
+
+  //STEP2 진행 개수 덮어쓰기
+  setFolderTodoCount(base.folderId, getProgressCountByFolder(tasks, base.folderId));
 
   await new Promise((r) => setTimeout(r, 120));
   return updated;
@@ -119,8 +128,10 @@ export async function deleteTask(taskId: string): Promise<boolean> {
 
   saveTasks(next);
 
-  //todoCount -1
-  if (target) bumpTodoCount(target.folderId, -1);
+  //STEP2 진행 개수 덮어쓰기
+  if (target) {
+    setFolderTodoCount(target.folderId, getProgressCountByFolder(next, target.folderId));
+  }
 
   await new Promise((r) => setTimeout(r, 120));
   return true;
