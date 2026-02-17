@@ -4,7 +4,6 @@ import logoAnimation from "@/assets/logo.mp4";
 import timetoText from "@/assets/timeto_text.svg";
 
 export default function LoginPage() {
-  console.error("[LOGIN] render reached");
   const [isLoading, setIsLoading] = useState(false);
 
   const [phase, setPhase] = useState<"playing" | "reveal">("playing");
@@ -84,11 +83,6 @@ export default function LoginPage() {
 
   const canLogin = authorizeUrl.length > 0;
 
-  useEffect(() => {
-    console.log("[LOGIN] env.VITE_KAKAO_AUTHORIZE_URL =", import.meta.env.VITE_KAKAO_AUTHORIZE_URL);
-    console.log("[LOGIN] authorizeUrl =", authorizeUrl);
-    console.log("[LOGIN] canLogin =", canLogin);
-  }, [authorizeUrl, canLogin]);
 
   const onClickKakaoLogin = useCallback(async () => {
     console.log("[LOGIN] click kakao login", { isLoading, canLogin, authorizeUrl });
@@ -179,7 +173,7 @@ export default function LoginPage() {
             type="button"
             className={`absolute z-20 pointer-events-auto left-0 right-0 bottom-17 w-full rounded-md bg-kakao-bg disabled:opacity-50 py-3.75 tt-cta ${ctaIn ? "tt-cta--in" : ""}`}
             onClick={onClickKakaoLogin}
-            // disabled={!canLogin || isLoading}
+            disabled={!canLogin || isLoading}
           >
             <div className="flex items-center justify-center gap-2">
               <img src={kakaoIcon} alt="카카오 아이콘" className="h-4.5 w-4.5" />

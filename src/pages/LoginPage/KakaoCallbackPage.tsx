@@ -2,24 +2,32 @@ import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "@/constants/authStore";
 
+type KakaoLoginResponse = {
+  status?: number;
+  code?: string;
+  message?: string;
+  data?: {
+    memberId?: number | string;
+    accessToken?: string;
+    refreshToken?: string;
+  };
+};
+
 export default function KakaoCallbackPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const loginMock = useAuthStore((s) => s.loginMock);
+
   const ranRef = useRef(false);
-  const lastCodeRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const code = params.get("code");
-    console.log("받은 인가코드:", code);
 
-    if (ranRef.current && lastCodeRef.current === code) return;
+    if (ranRef.current) return;
     ranRef.current = true;
-    lastCodeRef.current = code;
 
     if (!code) {
-      if (import.meta.env.DEV) console.log("[kakao] no code in callback");
       navigate("/login", { replace: true });
       return;
     }
@@ -27,10 +35,6 @@ export default function KakaoCallbackPage() {
     const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() ?? "";
 
     if (!baseUrl) {
-      if (import.meta.env.DEV) {
-        console.log("[kakao] VITE_API_BASE_URL missing -> mock login");
-        console.log("[kakao] code:", code);
-      }
       loginMock({
         user: { id: "mock", name: "사용자", email: "" },
         accessToken: `mock_${code}`,
@@ -45,41 +49,27 @@ export default function KakaoCallbackPage() {
 
     (async () => {
       try {
-        if (import.meta.env.DEV) {
-          console.log("[kakao] POST /api/auth/kakao/login");
-          console.log("[kakao] baseUrl:", baseUrl);
-          console.log("[kakao] code:", code);
-        }
-
         const res = await fetch(`${baseUrl}/api/auth/kakao/login`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ authorizationCode: code }),
           signal: ctrl.signal,
         });
 
-        const raw = await res.text();
-
-        if (import.meta.env.DEV) {
-          console.log("[kakao] status:", res.status);
-          console.log("[kakao] raw body:", raw);
-        }
-
-        if (!res.ok) throw new Error(`Login failed (${res.status})`);
-
-        let data: any;
+        let payload: KakaoLoginResponse | null = null;
         try {
-          data = raw ? JSON.parse(raw) : null;
+          payload = (await res.json()) as KakaoLoginResponse;
         } catch {
-          data = null;
+          payload = null;
         }
 
-        if (!data?.isSuccess) throw new Error("Login failed (isSuccess=false)");
+        if (!res.ok) throw new Error("Login failed");
 
-        const { memberId, accessToken } = data.result ?? {};
-        if (!accessToken) throw new Error("Login failed (no accessToken)");
+        const accessToken = payload?.data?.accessToken ?? "";
+        const memberId = payload?.data?.memberId;
+
+        if ((payload?.status ?? 0) !== 200) throw new Error("Login failed");
+        if (!accessToken) throw new Error("Login failed");
 
         loginMock({
           user: { id: String(memberId ?? ""), name: "사용자", email: "" },
@@ -87,8 +77,7 @@ export default function KakaoCallbackPage() {
         });
 
         navigate("/home", { replace: true });
-      } catch (err) {
-        if (import.meta.env.DEV) console.error("[kakao] login error:", err);
+      } catch {
         navigate("/login", { replace: true });
       }
     })();
