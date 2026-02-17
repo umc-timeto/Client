@@ -84,12 +84,11 @@ export default function HomePage() {
   //바텀시트/모달 열리면 스크롤 잠금
   useEffect(() => {
     const anyOpen = addSheetOpen || !!deleteTarget;
-    if (!anyOpen) return;
 
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    document.body.classList.toggle("no-scroll", anyOpen);
+
     return () => {
-      document.body.style.overflow = prev;
+      document.body.classList.remove("no-scroll");
     };
   }, [addSheetOpen, deleteTarget]);
 

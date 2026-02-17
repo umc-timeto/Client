@@ -180,13 +180,12 @@ export default function FolderPage() {
   //STEP3 모달/모달류 열림 시 스크롤 잠금
   //========================
   useEffect(() => {
-    const anyOpen = !!openTaskId || deleteConfirmOpen || menuOpen;
-    if (!anyOpen) return;
+    const anyOpen = Boolean(openTaskId) || deleteConfirmOpen || menuOpen;
 
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    document.body.classList.toggle("no-scroll", anyOpen);
+
     return () => {
-      document.body.style.overflow = prev;
+      document.body.classList.remove("no-scroll");
     };
   }, [openTaskId, deleteConfirmOpen, menuOpen]);
 

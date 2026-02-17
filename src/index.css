@@ -185,6 +185,18 @@
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+/* 모달 열리면 배경 스크롤 잠금 */
+.no-scroll {
+  overflow: hidden;
+}
+/* 스크롤바 폭 변동 방지 */
+html {
+  scrollbar-gutter: stable;
+}
+/* 기본: 스크롤바 숨기되 스크롤은 가능 */
+html,body {
+  @apply no-scrollbar;
+}
 
 @utility title-20-semibold {
   @apply font-pretendard text-title-20 font-semibold;
