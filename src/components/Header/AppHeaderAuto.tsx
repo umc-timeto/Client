@@ -17,19 +17,18 @@ import { useHeaderActions } from "@/contexts/HeaderActionContext";
 type AppHeaderAutoProps = {
   onOpenDrawer?: () => void;
   onOpenFolderMenu?: () => void;
-}; //onComplete?: () => void; 제거
+};
 
 type RootOutletContext = {
   openDrawer?: () => void;
 };
 
-//onComplete 를 context에서 가져오도록 수정
-export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu}: AppHeaderAutoProps) {
+export default function AppHeaderAuto({ onOpenDrawer }: AppHeaderAutoProps) {
   const location = useLocation();
   const navigate = useNavigate();
 
   const outletContext = useOutletContext<RootOutletContext>();
-
+  
   const path = location.pathname;
 
   const pickedCreateTask = useTimeBlockCreateStore((s) => s.pickedTask);
@@ -39,11 +38,10 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu}: AppHead
   const step = Number(stepRaw ?? "1");
   const safeStep = Number.isFinite(step) ? step : 1;
 
-  const { onComplete } = useHeaderActions(); //추가
+  const { onComplete } = useHeaderActions();
 
   const noop = () => {};
   const openDrawer = outletContext?.openDrawer ?? onOpenDrawer ?? noop;
-  const openFolderMenu = onOpenFolderMenu ?? noop;
   const complete = onComplete ?? noop;
 
   const setStep = (nextStep: number) => {
@@ -58,6 +56,13 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu}: AppHead
     window.dispatchEvent(new CustomEvent("timeblockCreate:save"));
   };
 
+  const requestHomeAddOpen = () => {
+    window.dispatchEvent(new CustomEvent("home:add"));
+  };
+  const requestFolderMenuOpen = () => {
+    window.dispatchEvent(new CustomEvent("folder:menu"));
+  };
+
   const RightTextButton = ({
     label,
     onClick,
@@ -69,9 +74,7 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu}: AppHead
   }) => (
     <button
       type="button"
-      className={`text-[20px] font-normal ${
-        disabled ? "text-grey-light-active" : "text-yellow-normal"
-      }`}
+      className={`text-[20px] font-normal ${disabled ? "text-grey-light-active" : "text-yellow-normal"}`}
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
     >
@@ -105,8 +108,12 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu}: AppHead
             <MenuSvg className="h-7 w-7" />
           </HeaderIconButton>
         }
+        //기존: onClick={() => navigate("/goal")}
         right={
-          <HeaderIconButton ariaLabel="add" onClick={() => navigate("/goal")}>
+          <HeaderIconButton
+            ariaLabel="add"
+            onClick={requestHomeAddOpen}
+          >
             <AddSvg className="h-7 w-7" />
           </HeaderIconButton>
         }
@@ -123,14 +130,10 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu}: AppHead
         title="목표 추가"
         left={
           <HeaderIconButton ariaLabel="close" onClick={goBack}>
-            <CloseSvg className="h-7.5 w-7.5" />
+            <CloseSvg className="h-7 w-7" />
           </HeaderIconButton>
         }
-        right={
-          showSave ? (
-            <RightTextButton label="저장" onClick={complete} disabled={!canSave} />
-          ) : undefined
-        }
+        right={showSave ? <RightTextButton label="저장" onClick={complete} disabled={!canSave} /> : undefined}
       />
     );
   }
@@ -145,7 +148,7 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu}: AppHead
           </HeaderIconButton>
         }
         right={
-          <HeaderIconButton ariaLabel="folder menu" onClick={openFolderMenu}>
+          <HeaderIconButton ariaLabel="folder menu" onClick={requestFolderMenuOpen}>
             <Menu2Svg className="h-7 w-7" />
           </HeaderIconButton>
         }
@@ -154,19 +157,32 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu}: AppHead
   }
 
 
-  if (path === "/folder/select") {
-    return (
-      <HeaderBase
-        title="목표 선택"
-        left={
-          <HeaderIconButton ariaLabel="close" onClick={goBack}>
-            <CloseSvg className="h-7.5 w-7.5" />
-          </HeaderIconButton>
-        }
-        right={<RightTextButton label=" " onClick={noop} />}
-      />
-    );
-  }
+if (path === "/folder/select") {
+  const stepRaw = searchParams.get("step");
+  const step = Number(stepRaw ?? "1");
+  const safeStep = step === 2 ? 2 : 1;
+
+  const showSave = safeStep === 2;
+  const canSave = getQueryFlag("canSave");
+
+  return (
+    <HeaderBase
+      title={safeStep === 2 ? "폴더 추가" : "목표 선택"}
+      left={
+        <HeaderIconButton ariaLabel="close" onClick={goBack}>
+          <CloseSvg className="h-7.5 w-7.5" />
+        </HeaderIconButton>
+      }
+      right={
+        showSave ? (
+          <RightTextButton label="저장" onClick={complete} disabled={!canSave} />
+        ) : (
+          <RightTextButton label=" " onClick={noop} />
+        )
+      }
+    />
+  );
+}
 
   if (path === "/task") {
     const canNext = getQueryFlag("canNext");
@@ -177,7 +193,7 @@ export default function AppHeaderAuto({ onOpenDrawer, onOpenFolderMenu}: AppHead
         title="할 일 추가"
         left={
           <HeaderIconButton ariaLabel="close" onClick={goBack}>
-            <CloseSvg className="h-7.5 w-7.5" />
+            <CloseSvg className="h-7 w-7" />
           </HeaderIconButton>
         }
         right={

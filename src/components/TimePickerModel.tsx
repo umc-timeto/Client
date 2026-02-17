@@ -140,7 +140,7 @@ export default function TimePickerModel({
             onClick={() => onConfirm(h, m)}
             className={[
               "text-[14px] w-full rounded-xl py-4 body-14-medium font-semibold",
-              canConfirm ? "bg-[#f1f1f1] text-gray-600" : "bg-gray-100 text-gray-300",
+              canConfirm ? "border border-[#00B1A6] text-[#00B1A6] bg-white active:bg-[#E6F7F5]" : "bg-gray-100 text-gray-300",
             ].join(" ")}
           >
             완료

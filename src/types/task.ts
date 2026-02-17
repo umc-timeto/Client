@@ -7,7 +7,7 @@ export type Task = {
   durationMinutes: number;  // 소요 시간 (분 단위)
   priority: TaskPriority;   // 중요도
   isDone: boolean;          // 진행/완료
-};
+};  
 
 export type TaskCreateInput = {
   folderId: string;
@@ -15,3 +15,19 @@ export type TaskCreateInput = {
   durationMinutes: number;
   priority: TaskPriority;
 };
+
+
+// type Goal = {
+//   goalId: string;
+//   title: string; //0~20자
+//   color: string; //예: "#FF6B6B"
+//   taskTotalCount: number; //목표 내 전체 task 개수
+// };
+
+// type Folder = {
+//   folderId: string;
+//   goalId: string;
+//   title: string;
+//   taskCount: number;
+//   order: number; //드래그 정렬용
+// };

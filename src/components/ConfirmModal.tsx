@@ -40,6 +40,7 @@
  * />
  * ```
  */
+import { useEffect } from "react";
 
 type ConfirmModalProps = {
   open: boolean;
@@ -60,6 +61,18 @@ export default function ConfirmModal({
   onCancel,
   onConfirm,
 }: ConfirmModalProps) {
+  //모달 열리면 스크롤 잠금
+  useEffect(() => {
+    if (!open) return;
+
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+
   if (!open) return null;
 
   return (
@@ -75,15 +88,16 @@ export default function ConfirmModal({
         <div className="title-16-medium text-center text-gray-700">{title}</div>
 
         {description ? (
-          <div className="mt-1.5 body-13-medium text-center text-gray-300">
-            {description}
-          </div>
+          <div className="mt-1.5 body-13-medium text-center text-gray-300">{description}</div>
         ) : null}
 
         <div className="mt-5 flex items-center justify-between px-18.25">
           <button
             type="button"
-            className="body-13-medium text-gray-700"
+            className={[
+              "body-13-medium text-gray-700 rounded-md px-2 py-1",
+              "hover:bg-grey-light-hover active:bg-grey-light",
+            ].join(" ")}
             onClick={onCancel}
           >
             {cancelText}
@@ -91,7 +105,10 @@ export default function ConfirmModal({
 
           <button
             type="button"
-            className="body-13-medium text-red-delete"
+            className={[
+              "body-13-medium text-red-delete rounded-md px-2 py-1",
+              "hover:bg-red-50 active:bg-red-100",
+            ].join(" ")}
             onClick={onConfirm}
           >
             {confirmText}
