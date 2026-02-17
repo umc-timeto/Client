@@ -245,7 +245,7 @@ export default function TaskPage() {
         </h1>
 
         {/*상단 안내 서브 텍스트*/}
-        <p className="mt-2 font-pretendard text-[14px] font-medium leading-normal text-gray-300">
+        <p className="mt-2 font-pretendard text-[14px] font-medium leading-normal text-green-normal">
           부담 없이 도전할 수 있는 일부터 시작해요
         </p>
 
@@ -300,7 +300,7 @@ export default function TaskPage() {
       </h1>
 
       {/*상단 안내 서브 텍스트*/}
-      <p className="mt-2 font-pretendard text-[14px] font-medium leading-normal text-gray-300">
+      <p className="mt-2 font-pretendard text-[14px] font-medium leading-normal text-green-normal">
         중요한 일부터 차근차근 해결해요
       </p>
 

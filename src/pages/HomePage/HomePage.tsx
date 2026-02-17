@@ -1,4 +1,3 @@
-//C:\Users\tndus\Client\src\pages\HomePage\HomePage.tsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
