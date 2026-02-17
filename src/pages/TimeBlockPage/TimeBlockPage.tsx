@@ -3,15 +3,13 @@ import CalendarWeekStrip from "@/pages/TimeBlockPage/components/CalendarWeekStri
 import useCalendarModel from "@/hooks/TimeBlockPage/useCalendarModel";
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { ColorKey } from "@/constants/timeBlockCreateStore";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import {
-  findFolderById,
-  findGoalById,
-  findTaskById,
-  mockTimeBlocks,
-} from "@/pages/TimeBlockPage/data/mockTimeBlockCreate";
+import { timeBlockDayApi } from "@/apis/TimeBlockPage/timeBlockDay";
+import { todoStatusApi, type TodoStatusState } from "@/apis/TimeBlockPage/todoStatus";
 import FlagSvg from "@/assets/flag.svg?react";
+import type { ColorKey } from "@/constants/timeBlockCreateStore";
+import { colorHexToKey } from "@/utils/ColorMapping";
 
 const DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"] as const;
 
@@ -50,11 +48,22 @@ const WEEK_STRIP_ANIM_MS = 180;
 
 const OVERLAP_PX = 24; 
 
+type BlockDayItem = {
+  blockId: number;
+  todoId: number;
+  startAt: string; // ISO string
+  endAt: string; // ISO string
+  todoName: string;
+  priority: "HIGH" | "MEDIUM" | "LOW";
+  state: TodoStatusState;
+  goalName?: string;
+  color?: string;
+};
+
 type BlockItem = {
-  b: (typeof mockTimeBlocks)[number];
-  task: NonNullable<ReturnType<typeof findTaskById>>;
-  folder?: ReturnType<typeof findFolderById>;
-  goal?: ReturnType<typeof findGoalById>;
+  b: BlockDayItem;
+  task: { title: string };
+  folder?: { title: string };
   colorKey: ColorKey;
   startMin: number;
   minutes: number;
@@ -64,6 +73,8 @@ type BlockItem = {
 
 type BlockLayout = {
   blockId: string;
+  todoId: number;
+  state: TodoStatusState;
   startAdj: number;
   endAdj: number;
   topPx: number;
@@ -76,31 +87,48 @@ type BlockLayout = {
 };
 
 const computeLayoutsForDay = (args: {
+  blocks: BlockDayItem[];
   selectedDateStr: string;
   START_MIN: number;
   PX_PER_MIN: number;
   parseHmToMinutes: (hm: string) => number | null;
   debug?: boolean;
 }): BlockLayout[] => {
-  const { selectedDateStr, START_MIN, PX_PER_MIN, parseHmToMinutes, debug } = args;
+  const { blocks, START_MIN, PX_PER_MIN, parseHmToMinutes, debug } = args;
 
-  const raw: BlockItem[] = mockTimeBlocks
-    .filter((b) => b.date === selectedDateStr)
+  const raw: BlockItem[] = (blocks ?? [])
     .map((b) => {
-      const task = findTaskById(b.taskId);
-      const folder = task ? findFolderById(task.folderId) : undefined;
-      const goal = folder ? findGoalById(folder.goalId) : undefined;
-      const colorKey = (goal?.colorKey ?? task?.colorKey ?? "yellow") as ColorKey;
+      const dStart = new Date(b.startAt);
+      const dEnd = new Date(b.endAt);
 
-      const startMin = parseHmToMinutes(b.start);
-      const minutes = task?.minutes ?? 30;
+      const hh = dStart.getHours();
+      const mm = dStart.getMinutes();
+      const startLabel = `${pad2(hh)}:${pad2(mm)}`;
+
+      const startMin = parseHmToMinutes(startLabel);
+      const minutesRaw = Math.round((dEnd.getTime() - dStart.getTime()) / 60000);
+      const minutes = Number.isFinite(minutesRaw) && minutesRaw > 0 ? minutesRaw : 30;
+
+      const colorKey = colorHexToKey(b.color);
+
+      const task = { title: b.todoName };
+      const folder = b.goalName ? { title: b.goalName } : undefined;
 
       const startAdj = startMin !== null && startMin < START_MIN ? startMin + 24 * 60 : startMin;
       const endAdj = startAdj !== null ? startAdj + minutes : null;
 
-      return { b, task, folder, goal, colorKey, startMin: startMin ?? 0, minutes, startAdj: startAdj ?? 0, endAdj: endAdj ?? 0 };
+      return {
+        b,
+        task,
+        folder,
+        colorKey,
+        startMin: startMin ?? 0,
+        minutes,
+        startAdj: startAdj ?? 0,
+        endAdj: endAdj ?? 0,
+      };
     })
-    .filter((x) => Boolean(x.task) && Number.isFinite(x.startAdj) && Number.isFinite(x.endAdj)) as BlockItem[];
+    .filter((x) => Number.isFinite(x.startAdj) && Number.isFinite(x.endAdj)) as BlockItem[];
 
   raw.sort((a, b) => {
     if (a.startAdj !== b.startAdj) return a.startAdj - b.startAdj;
@@ -108,8 +136,12 @@ const computeLayoutsForDay = (args: {
   });
 
   if (debug) {
-    const bad = mockTimeBlocks.filter((b) => b.date === selectedDateStr && parseHmToMinutes(b.start) === null);
-    if (bad.length) console.warn("[TimeBlock] invalid start format", bad);
+    const bad = (blocks ?? []).filter((b) => {
+      const dStart = new Date(b.startAt);
+      const startLabel = `${pad2(dStart.getHours())}:${pad2(dStart.getMinutes())}`;
+      return parseHmToMinutes(startLabel) === null;
+    });
+    if (bad.length) console.warn("[TimeBlock] invalid startAt format", bad);
   }
 
   type ActiveVisible = {
@@ -141,7 +173,9 @@ const computeLayoutsForDay = (args: {
     const topPx = (it.startAdj - START_MIN) * PX_PER_MIN;
     const heightPx = Math.max(18, (it.endAdj - it.startAdj) * PX_PER_MIN);
     return {
-      blockId: it.b.id,
+      blockId: String(it.b.blockId),
+      todoId: it.b.todoId,
+      state: it.b.state,
       startAdj: it.startAdj,
       endAdj: it.endAdj,
       topPx,
@@ -200,7 +234,7 @@ const computeLayoutsForDay = (args: {
       const cols: 1 | 2 = isOverlappingNow ? 2 : 1;
       const l = makeLayout(it, lane, cols);
 
-      const existing = layoutById.get(it.b.id);
+      const existing = layoutById.get(String(it.b.blockId));
       if (existing) {
         existing.startAdj = l.startAdj;
         existing.endAdj = l.endAdj;
@@ -213,10 +247,10 @@ const computeLayoutsForDay = (args: {
         existing.colorKey = l.colorKey;
       } else {
         layouts.push(l);
-        layoutById.set(it.b.id, l);
+        layoutById.set(String(it.b.blockId), l);
       }
 
-      activeByLane[lane] = { id: it.b.id, endAdj: it.endAdj, lane };
+      activeByLane[lane] = { id: String(it.b.blockId), endAdj: it.endAdj, lane };
     }
   }
 
@@ -337,6 +371,34 @@ export default function TimeBlockPage() {
 
   const [doneIds, setDoneIds] = useState<Record<string, boolean>>({});
 
+  const queryClient = useQueryClient();
+
+  const toggleTodoStatusMutation = useMutation({
+    mutationFn: async (vars: { todoId: number; state: TodoStatusState }) => {
+      return todoStatusApi.updateTodoStatus(vars.todoId, { state: vars.state });
+    },
+    onMutate: async (vars) => {
+      await queryClient.cancelQueries({ queryKey: ["timeblocks", "day", selectedDateStr] });
+      return { vars };
+    },
+    onError: (_err, vars) => {
+      setDoneIds((prev) => {
+        const next = { ...prev };
+        for (const l of layoutsForDay) {
+          if (l.todoId === vars.todoId) {
+            // revert to server state
+            const serverDone = l.state === "complete";
+            next[l.blockId] = serverDone;
+          }
+        }
+        return next;
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["timeblocks", "day", selectedDateStr] });
+    },
+  });
+
   const selectedDateStr = searchParams.get("date") ?? `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
 
   const ROW_HEIGHT_PX = 64;
@@ -351,15 +413,34 @@ export default function TimeBlockPage() {
     isCondensed,
   });
 
+  const { data: blocksForDay = [] } = useQuery({
+    queryKey: ["timeblocks", "day", selectedDateStr],
+    queryFn: () => timeBlockDayApi.getTimeBlocksByDay(selectedDateStr),
+    staleTime: 30_000,
+  });
+
   const layoutsForDay = useMemo(() => {
     return computeLayoutsForDay({
+      blocks: blocksForDay,
       selectedDateStr,
       START_MIN,
       PX_PER_MIN,
       parseHmToMinutes,
       debug: import.meta.env.DEV,
     });
-  }, [selectedDateStr, START_MIN, PX_PER_MIN]);
+  }, [blocksForDay, selectedDateStr, START_MIN, PX_PER_MIN]);
+
+  useEffect(() => {
+    setDoneIds((prev) => {
+      const next = { ...prev };
+      for (const l of layoutsForDay) {
+        if (next[l.blockId] === undefined) {
+          next[l.blockId] = l.state === "complete";
+        }
+      }
+      return next;
+    });
+  }, [layoutsForDay]);
 
   useEffect(() => {
     const monthEl = monthSectionRef.current;
@@ -420,13 +501,19 @@ export default function TimeBlockPage() {
                   key={layout.blockId}
                   layout={layout}
                   idx={idx}
-                  done={Boolean(doneIds[layout.blockId])}
-                  onToggle={() =>
+                  done={Boolean(doneIds[layout.blockId] ?? (layout.state === "complete"))}
+                  onToggle={() => {
+                    const currentDone = Boolean(doneIds[layout.blockId] ?? (layout.state === "complete"));
+                    const nextState: TodoStatusState = currentDone ? "progress" : "complete";
+
+                    // optimistic UI
                     setDoneIds((prev) => ({
                       ...prev,
-                      [layout.blockId]: !prev[layout.blockId],
-                    }))
-                  }
+                      [layout.blockId]: !currentDone,
+                    }));
+
+                    toggleTodoStatusMutation.mutate({ todoId: layout.todoId, state: nextState });
+                  }}
                 />
               ))}
             </div>
