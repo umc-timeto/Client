@@ -14,11 +14,18 @@ export default function ProtectedLayout() {
   };
 
   const getAccessToken = () => {
-    return (
-      localStorage.getItem("accessToken") ||
-      sessionStorage.getItem("accessToken") ||
-      getCookie("accessToken")
-    );
+    const ls = localStorage.getItem("accessToken");
+    const ss = sessionStorage.getItem("accessToken");
+    const ck = getCookie("accessToken");
+
+    if (ls || ss || ck) return ls || ss || ck;
+
+    if (import.meta.env.DEV) {
+      const devToken = (import.meta.env.VITE_DEV_ACCESS_TOKEN as string | undefined)?.trim();
+      if (devToken) return devToken;
+    }
+
+    return null;
   };
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => Boolean(getAccessToken()));

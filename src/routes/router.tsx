@@ -24,7 +24,7 @@ const publicChildren: RouteObject[] = [
   { index: true, element: <LoginPage /> },
   { path: "login", element: <LoginPage /> },
 
-  { path: "auth/kakao/callback", element: <KakaoCallbackPage /> },
+  { path: "/auth/kakao/callback", element: <KakaoCallbackPage /> },
 ];
 
 const protectedChildren: RouteObject[] = [
@@ -51,7 +51,6 @@ const routes: RouteObject[] = [
         element: <ProtectedLayout />,
         children: protectedChildren,
       },
-      { path: "*", element: <Navigate to="/login" replace /> },
     ],
   },
 ];
