@@ -1,46 +1,6 @@
-/**
- * ConfirmModal
- * 
- * 재사용 가능한 확인(Confirm) 모달 컴포넌트입니다.
- * 
- * - 버튼 라벨은 `cancelText`, `confirmText`로 페이지별로 자유롭게 바꿀 수 있습니다.
- *   (예: "취소/삭제", "취소/탈퇴" 등)
- * - `open`이 false면 아무 것도 렌더링하지 않습니다.
- * - 배경(오버레이) 클릭 시 `onCancel`이 호출됩니다.
- * 
- * 사용 예시
- * 
- * 1) 회원탈퇴 확인
- * ```tsx
- * const [open, setOpen] = useState(false);
- * 
- * <ConfirmModal
- *   open={open}
- *   title="탈퇴하시겠습니까?"
- *   description="계정이 삭제되며 복구되지 않습니다"
- *   cancelText="취소"
- *   confirmText="탈퇴"
- *   onCancel={() => setOpen(false)}
- *   onConfirm={handleWithdraw}
- * />
- * ```
- * 
- * 2) 삭제 확인
- * ```tsx
- * const [open, setOpen] = useState(false);
- * 
- * <ConfirmModal
- *   open={open}
- *   title="목표를 삭제하시겠어요??"
- *   description="목표 내 폴더와 할 일도 삭제돼요"
- *   cancelText="취소"
- *   confirmText="삭제"
- *   onCancel={() => setOpen(false)}
- *   onConfirm={handleDelete}
- * />
- * ```
- */
 import { useEffect } from "react";
+
+type ConfirmModalVariant = "default" | "danger" | "timeblock" | "timeblockConflict";
 
 type ConfirmModalProps = {
   open: boolean;
@@ -48,6 +8,9 @@ type ConfirmModalProps = {
   description?: string;
   cancelText?: string;
   confirmText?: string;
+  variant?: ConfirmModalVariant;
+  cancelClassName?: string;
+  confirmClassName?: string;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -58,10 +21,12 @@ export default function ConfirmModal({
   description,
   cancelText = "취소",
   confirmText = "확인",
+  variant = "default",
+  cancelClassName,
+  confirmClassName,
   onCancel,
   onConfirm,
 }: ConfirmModalProps) {
-  //모달 열리면 스크롤 잠금
   useEffect(() => {
     if (!open) return;
 
@@ -75,6 +40,24 @@ export default function ConfirmModal({
 
   if (!open) return null;
 
+  const isDanger = variant === "danger" || confirmText === "삭제";
+
+  const cancelBtnClass = [
+    "text-[13px]",
+    "text-gray-dark",
+    cancelClassName,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const confirmBtnClass = [
+    "text-[13px]",
+    isDanger ? "text-red-delete" : "text-green-normal",
+    confirmClassName,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <div className="fixed inset-0 z-60 flex items-center justify-center px-10.75">
       <button
@@ -85,19 +68,16 @@ export default function ConfirmModal({
       />
 
       <div className="relative w-full max-w-72.5 rounded-[10px] bg-white pt-6.5 pb-5">
-        <div className="title-16-medium text-center text-gray-700">{title}</div>
+        <div className="text-[16px] text-center text-gray-700 font-medium">{title}</div>
 
         {description ? (
-          <div className="mt-1.5 body-13-medium text-center text-gray-300">{description}</div>
+          <div className="mt-1.5 text-[13px] text-center text-gray-300 font-medium">{description}</div>
         ) : null}
 
-        <div className="mt-5 flex items-center justify-between px-18.25">
+        <div className="mt-5 flex items-center justify-between px-18.25 font-medium">
           <button
             type="button"
-            className={[
-              "body-13-medium text-gray-700 rounded-md px-2 py-1",
-              "hover:bg-grey-light-hover active:bg-grey-light",
-            ].join(" ")}
+            className={cancelBtnClass}
             onClick={onCancel}
           >
             {cancelText}
@@ -105,10 +85,7 @@ export default function ConfirmModal({
 
           <button
             type="button"
-            className={[
-              "body-13-medium text-red-delete rounded-md px-2 py-1",
-              "hover:bg-red-50 active:bg-red-100",
-            ].join(" ")}
+            className={confirmBtnClass}
             onClick={onConfirm}
           >
             {confirmText}

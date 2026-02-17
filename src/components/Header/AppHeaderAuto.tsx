@@ -341,7 +341,6 @@ if (path === "/folder/select") {
             label="저장"
             onClick={() => {
               requestTimeBlockCreateSave();
-              navigate("/timeblock");
             }}
             disabled={!canSave}
           />

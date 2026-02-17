@@ -1,7 +1,11 @@
 import type { ColorKey } from "@/constants/timeBlockCreateStore";
 
 export const colorHexToKey = (hex: unknown): ColorKey => {
-  const v = String(hex ?? "").trim().toUpperCase();
+  let v = String(hex ?? "").trim().toUpperCase();
+
+  if (v && !v.startsWith("#")) {
+    v = `#${v}`;
+  }
 
   const map: Record<string, ColorKey> = {
     "#FF8373": "red",

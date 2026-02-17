@@ -15,21 +15,22 @@ export type ColorKey =
 export type TaskLevel = "high" | "mid" | "low";
 
 export type GoalItem = {
-  id: string;
+  id: number;
   title: string;
   colorKey?: ColorKey;
 };
 
 export type FolderItem = {
-  id: string;
+  id: number;
   title: string;
-  goalId: string;
+  goalId: number;
 };
 
 export type TaskItem = {
   id: string;
+  todoId: number;
+  folderId: number;
   title: string;
-  folderId: string;
   minutes?: number;
   colorKey?: ColorKey;
   level?: TaskLevel;
