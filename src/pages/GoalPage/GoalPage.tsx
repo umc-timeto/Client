@@ -195,25 +195,30 @@ export default function GoalPage() {
   //========================
   //STEP7 저장 동작(API 연동)
   //========================
-  const handleSave = useCallback(async () => {
-    if (!canSave) return;
+  const [saving, setSaving] = useState(false);
 
-    const body = buildGoalCreateBody();
+const handleSave = useCallback(async () => {
+  if (!canSave || saving) return;
 
-    try {
-      if (isEdit && goalId) {
-        await goalPageApi.updateGoal(Number(goalId), body);
-        navigate("/home");
-        return;
-      }
+  setSaving(true);
+  const body = buildGoalCreateBody();
 
-      await goalPageApi.addGoal(body);
-      navigate("/home");
-    } catch (e) {
-      console.error(e);
-      //실패 시 이동 안 함(사용자가 그대로 수정/재시도 가능)
+  try {
+    if (isEdit && goalId) {
+      await goalPageApi.updateGoal(Number(goalId), body);
+      navigate("/home", { replace: true });
+      return;
     }
-  }, [canSave, buildGoalCreateBody, isEdit, goalId, navigate]);
+
+    await goalPageApi.addGoal(body);
+    navigate("/home", { replace: true });
+  } catch (e) {
+    console.error(e);
+  } finally {
+    setSaving(false);
+  }
+}, [canSave, saving, buildGoalCreateBody, isEdit, goalId, navigate]);
+
 
   //========================
   //STEP8 헤더 "저장" 버튼 동작 등록
