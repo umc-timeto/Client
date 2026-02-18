@@ -14,6 +14,7 @@ type RootOutletContext = {
 export default function RootLayout() {
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
+  const user = useAuthStore((s) => s.user);
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
@@ -59,8 +60,8 @@ export default function RootLayout() {
       <Navbar
         open={isDrawerOpen}
         onClose={closeDrawer}
-        userName={undefined}
-        userEmail={undefined}
+        userName={user?.name}
+        userEmail={user?.email}
         onNavigate={onNavigate}
         onLogout={onLogout}
         onWithdraw={onOpenWithdraw}

@@ -21,8 +21,15 @@ export default function Navbar({
 }: NavbarProps) {
   if (!open) return null;
 
-  const displayName = userName && userName.trim().length > 0 ? userName : "사용자";
-  const displayEmail = userEmail && userEmail.trim().length > 0 ? userEmail : "email@example.com";
+  const displayName =
+    userName?.trim() && userName.trim().length > 0
+      ? userName
+      : "사용자";
+
+  const displayEmail =
+    userEmail?.trim() && userEmail.trim().length > 0
+      ? userEmail
+      : "email@example.com";
 
   return (
     <div className="fixed inset-0 z-500 flex flex-col bg-white">
