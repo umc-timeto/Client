@@ -636,6 +636,7 @@ export default function FolderPage() {
         description="폴더 내 할 일도 삭제돼요"
         cancelText="취소"
         confirmText="삭제"
+        variant="danger"
         onCancel={() => setDeleteConfirmOpen(false)}
         onConfirm={deleteFolder}
       />

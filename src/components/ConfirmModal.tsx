@@ -40,7 +40,8 @@ export default function ConfirmModal({
 
   if (!open) return null;
 
-  const isDanger = variant === "danger" || confirmText === "삭제";
+  const isDanger = variant === "danger";
+  const isTimeblockConflict = variant === "timeblockConflict";
 
   const cancelBtnClass = [
     "text-[13px]",
@@ -51,15 +52,19 @@ export default function ConfirmModal({
     .join(" ");
 
   const confirmBtnClass = [
-    "text-[13px]",
-    isDanger ? "text-red-delete" : "text-green-normal",
+    "text-[13px] ",
+    isDanger
+      ? "text-red-delete"
+      : isTimeblockConflict
+      ? "text-folder-green-nomal"
+      : "",
     confirmClassName,
   ]
     .filter(Boolean)
     .join(" ");
 
   return (
-    <div className="fixed inset-0 z-60 flex items-center justify-center px-10.75">
+    <div className="fixed inset-0 z-600 flex items-center justify-center px-10.75">
       <button
         type="button"
         className="absolute inset-0 bg-black/20"
@@ -71,10 +76,10 @@ export default function ConfirmModal({
         <div className="text-[16px] text-center text-gray-700 font-medium">{title}</div>
 
         {description ? (
-          <div className="mt-1.5 text-[13px] text-center text-gray-300 font-medium">{description}</div>
+          <div className="mt-1.5 text-[13px] text-center text-gray-300 font-medium ">{description}</div>
         ) : null}
 
-        <div className="mt-5 flex items-center justify-between px-18.25 font-medium">
+        <div className="mt-5 flex items-center justify-between px-18.25 font-medium ">
           <button
             type="button"
             className={cancelBtnClass}

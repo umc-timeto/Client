@@ -356,6 +356,7 @@ export default function HomePage() {
         description="목표 내 폴더와 할 일도 삭제돼요"
         cancelText="취소"
         confirmText="삭제"
+        variant="danger"
         onCancel={() => setDeleteTarget(null)}
         onConfirm={confirmDelete}
       />

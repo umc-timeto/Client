@@ -387,6 +387,7 @@ export default function SurveyPage() {
         description="삭제한 일지는 복구되지 않습니다"
         cancelText="취소"
         confirmText="삭제"
+        variant="danger"
         onCancel={() => setConfirmOpen(false)}
         onConfirm={handleConfirmDelete}
       />

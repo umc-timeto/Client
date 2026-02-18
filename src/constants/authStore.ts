@@ -14,7 +14,7 @@ type AuthState = {
 
   hydrate: () => void;
   loginMock: (payload: { user: AuthUser; accessToken: string }) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
 };
 
 const STORAGE_KEY = "timetto_auth_v1";

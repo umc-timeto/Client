@@ -51,8 +51,8 @@ const OVERLAP_PX = 24;
 type BlockDayItem = {
   blockId: number;
   todoId: number;
-  startAt: string; // ISO string
-  endAt: string; // ISO string
+  startAt: string;
+  endAt: string;
   todoName: string;
   priority: "HIGH" | "MEDIUM" | "LOW";
   state: TodoStatusState;
@@ -416,7 +416,9 @@ export default function TimeBlockPage() {
   const { data: blocksForDay = [] } = useQuery({
     queryKey: ["timeblocks", "day", selectedDateStr],
     queryFn: () => timeBlockDayApi.getTimeBlocksByDay(selectedDateStr),
-    staleTime: 30_000,
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 
   const layoutsForDay = useMemo(() => {
@@ -506,7 +508,6 @@ export default function TimeBlockPage() {
                     const currentDone = Boolean(doneIds[layout.blockId] ?? (layout.state === "complete"));
                     const nextState: TodoStatusState = currentDone ? "progress" : "complete";
 
-                    // optimistic UI
                     setDoneIds((prev) => ({
                       ...prev,
                       [layout.blockId]: !currentDone,
