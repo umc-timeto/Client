@@ -1,4 +1,5 @@
-import CloseIcon from "@/assets/close.svg";
+import CloseIcon from "@/assets/close_grey.svg";
+import Logo from "@/assets/logo.svg";
 
 type NavbarProps = {
   open: boolean;
@@ -48,9 +49,19 @@ export default function Navbar({
       </header>
 
       <main className="flex-1 px-5 pb-0 flex flex-col">
-        <section className="pt-8">
-          <div className="title-20-semibold text-gray-700">{displayName}</div>
-          <div className="mt-2 text-[14px] text-gray-300">{displayEmail}</div>
+        <section className=" flex flex-col items-start">
+          <img
+            src={Logo}
+            alt="로고"
+            className="w-8.75 h-9.25"
+          />
+
+          <div className="mt-5 title-20-semibold text-gray-700">
+            {displayName}
+          </div>
+          <div className="mt-2 text-[14px] text-gray-300">
+            {displayEmail}
+          </div>
         </section>
 
         <nav className="mt-[40.5px] flex flex-col gap-5">
