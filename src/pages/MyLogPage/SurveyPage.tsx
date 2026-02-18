@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useAutoCreateLog } from "@/hooks/MyLogPage/useAutoCreateLog";
+import { useAutoUpdateLog } from "@/hooks/MyLogPage/useAutoUpdateLog";
+import { useLogDetail } from "@/hooks/MyLogPage/useLogDetail";
+import type { Satisfaction, Achievement } from "@/apis/MyLogPage/logs";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { deleteLogApi } from "@/apis/MyLogPage/deleteLog";
 import ConfirmModal from "@/components/ConfirmModal";
 
 type Choice = {
@@ -64,18 +70,20 @@ const QUESTIONS: Question[] = [
   },
 ];
 
-const mockInitialAnswers = {
-  q1: "sat",
-  q2: "most",
-  q3: "사이드 프로젝트 팀원들과 비대면 모각코를 진행해 2시간 이상 집중했다!\nSQLD 2.1 단원별 3시간이나 공부했다.\n예상 소요 시간보다 1시간 더 걸렸다.",
-} as const;
 
 const toYmd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 const storageKey = (d: Date) => `mylog:survey:${toYmd(d)}`;
 
 export default function SurveyPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
+
+  const logIdParam = searchParams.get("logId") ?? searchParams.get("logid") ?? searchParams.get("id");
+  const logId = useMemo(() => {
+    const n = Number(logIdParam);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [logIdParam]);
 
   const date = useMemo(() => {
     const d = parseYmd(searchParams.get("date"));
@@ -84,20 +92,7 @@ export default function SurveyPage() {
 
   const key = useMemo(() => storageKey(date), [date]);
 
-  const initial = useMemo(() => {
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) return mockInitialAnswers;
-      const parsed = JSON.parse(raw) as { q1?: string; q2?: string; q3?: string };
-      return {
-        q1: parsed.q1 ?? mockInitialAnswers.q1,
-        q2: parsed.q2 ?? mockInitialAnswers.q2,
-        q3: parsed.q3 ?? mockInitialAnswers.q3,
-      };
-    } catch {
-      return mockInitialAnswers;
-    }
-  }, [key]);
+  const initial = { q1: "", q2: "", q3: "" };
 
   const [single, setSingle] = useState<Record<string, string>>({
     q1: initial.q1,
@@ -106,39 +101,171 @@ export default function SurveyPage() {
   const [text, setText] = useState<string>(initial.q3);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteLogApi.deleteLog(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["logs", "monthly"] });
+      if (logId) {
+        queryClient.removeQueries({ queryKey: ["logs", "detail", logId] });
+      }
+      const next = new URLSearchParams(searchParams);
+      next.delete("logId");
+      next.delete("logid");
+      next.delete("id");
+      lastSyncedRef.current = null;
+      navigate("/mylog", { replace: true });
+    },
+  });
+
+  const answer1 = useMemo<Satisfaction | null>(() => {
+    const v = (single.q1 ?? "").trim();
+    if (!v) return null;
+    if (v === "sat") return "GREAT";
+    if (v === "so") return "SOSO";
+    if (v === "unsat") return "BAD";
+    return null;
+  }, [single.q1]);
+
+  const answer2 = useMemo<Achievement | null>(() => {
+    const v = (single.q2 ?? "").trim();
+    if (!v) return null;
+    if (v === "all") return "PERFECT";
+    if (v === "most") return "MOSTLY";
+    if (v === "half") return "HALF";
+    if (v === "few") return "SOMEWHAT";
+    if (v === "none") return "DIFFERENT";
+    return null;
+  }, [single.q2]);
+
+  const answer3 = useMemo(() => (text ?? "").trim(), [text]);
+
+  const { isPosting } = useAutoCreateLog({
+    answer1,
+    answer2,
+    answer3,
+    debounceMs: 500,
+    enabled: !logId,
+    onSuccess: (createdLogId) => {
+      queryClient.invalidateQueries({ queryKey: ["logs", "monthly"] });
+      if (createdLogId) {
+        queryClient.invalidateQueries({ queryKey: ["logs", "detail", createdLogId] });
+      }
+
+      if (!createdLogId) return;
+
+      const next = new URLSearchParams(searchParams);
+      next.set("logId", String(createdLogId));
+
+      navigate({ pathname: "/mylog/survey", search: `?${next.toString()}` }, { replace: true });
+    },
+  });
+
+  const { data: logDetail } = useLogDetail(logId ?? 0);
+
+  const lastSyncedRef = useRef<{ a1: Satisfaction | null; a2: Achievement | null; a3: string } | null>(null);
+
   useEffect(() => {
+    if (!logId) {
+      lastSyncedRef.current = null;
+      return;
+    }
+    if (!logDetail) return;
+
+    lastSyncedRef.current = {
+      a1: logDetail.answer1 ?? null,
+      a2: logDetail.answer2 ?? null,
+      a3: (logDetail.answer3 ?? "").trim(),
+    };
+  }, [logId, logDetail]);
+
+  const isDirty = useMemo(() => {
+    if (!logId) return false;
+    if (!logDetail) return false;
+
+    const base = lastSyncedRef.current ?? {
+      a1: logDetail.answer1 ?? null,
+      a2: logDetail.answer2 ?? null,
+      a3: (logDetail.answer3 ?? "").trim(),
+    };
+
+    return base.a1 !== answer1 || base.a2 !== answer2 || base.a3 !== answer3;
+  }, [logId, logDetail, answer1, answer2, answer3]);
+
+  const [patchTrigger, setPatchTrigger] = useState(0);
+  const bumpPatch = () => setPatchTrigger((v) => v + 1);
+
+  const { isPatching } = useAutoUpdateLog({
+    logId,
+    answer1,
+    answer2,
+    answer3,
+    trigger: patchTrigger,
+    debounceMs: 500,
+    enabled: Boolean(logId) && Boolean(logDetail) && isDirty,
+    onSuccess: () => {
+      lastSyncedRef.current = { a1: answer1, a2: answer2, a3: answer3 };
+      queryClient.invalidateQueries({ queryKey: ["logs", "monthly"] });
+      if (logId) {
+        queryClient.invalidateQueries({ queryKey: ["logs", "detail", logId] });
+      }
+    },
+  });
+
+  const textPatchTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (textPatchTimerRef.current) window.clearTimeout(textPatchTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!logDetail) return;
+
+    const mapSatToChoice = (v: Satisfaction | null | undefined) => {
+      if (v === "GREAT") return "sat";
+      if (v === "SOSO") return "so";
+      if (v === "BAD") return "unsat";
+      return "";
+    };
+
+    const mapAchToChoice = (v: Achievement | null | undefined) => {
+      if (v === "PERFECT") return "all";
+      if (v === "MOSTLY") return "most";
+      if (v === "HALF") return "half";
+      if (v === "SOMEWHAT") return "few";
+      if (v === "DIFFERENT") return "none";
+      return "";
+    };
+
+    setSingle({
+      q1: mapSatToChoice(logDetail.answer1),
+      q2: mapAchToChoice(logDetail.answer2),
+    });
+    setText((logDetail.answer3 ?? "").slice(0, 100));
+  }, [logDetail]);
+
+  useEffect(() => {
+    if (logId) return;
     setSingle({ q1: initial.q1, q2: initial.q2 });
     setText(initial.q3);
-  }, [initial.q1, initial.q2, initial.q3]);
-
-  const saveTimer = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (saveTimer.current) window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(() => {
-      try {
-        localStorage.setItem(
-          key,
-          JSON.stringify({ q1: single.q1 ?? "", q2: single.q2 ?? "", q3: text ?? "" })
-        );
-      } catch {}
-    }, 150);
-
-    return () => {
-      if (saveTimer.current) window.clearTimeout(saveTimer.current);
-    };
-  }, [key, single.q1, single.q2, text]);
+  }, [logId, initial.q1, initial.q2, initial.q3]);
 
   const onDelete = () => {
     setConfirmOpen(true);
   };
 
-  const handleConfirmDelete = () => {
-    try {
-      localStorage.removeItem(key);
-    } catch {}
+  const handleConfirmDelete = async () => {
     setConfirmOpen(false);
-    navigate(-1);
+
+    if (!logId) {
+      navigate(-1);
+      return;
+    }
+
+    try {
+      await deleteMutation.mutateAsync(logId);
+    } catch {
+    }
   };
 
   useEffect(() => {
@@ -148,28 +275,53 @@ export default function SurveyPage() {
   }, [key]);
 
   const setChoice = (qid: string, cid: string) => {
-    setSingle((prev) => ({ ...prev, [qid]: prev[qid] === cid ? "" : cid }));
+    setSingle((prev) => {
+      const next = { ...prev, [qid]: prev[qid] === cid ? "" : cid };
+      return next;
+    });
+
+    if (logId) bumpPatch();
   };
 
   const onChangeText = (v: string, maxLen: number) => {
     setText(v.slice(0, maxLen));
+
+    if (!logId) return;
+    if (textPatchTimerRef.current) window.clearTimeout(textPatchTimerRef.current);
+    textPatchTimerRef.current = window.setTimeout(() => {
+      bumpPatch();
+    }, 600);
   };
+
+  useEffect(() => {
+    return () => {
+      queryClient.invalidateQueries({ queryKey: ["logs", "monthly"] });
+      if (logId) {
+        queryClient.invalidateQueries({ queryKey: ["logs", "detail", logId] });
+      }
+    };
+  }, [queryClient, logId]);
 
   return (
     <div className="min-h-dvh bg-white">
       <div className="px-5 pt-2">
         <div className="mt-6 space-y-9.75 pb-10">
+          {isPosting || isPatching || deleteMutation.isPending ? (
+            <div className="text-[12px] text-grey-light-active">
+              {deleteMutation.isPending ? "삭제 중…" : "자동 저장 중…"}
+            </div>
+          ) : null}
           {QUESTIONS.map((q, idx) => {
             if (q.type === "single") {
               return (
                 <section key={q.id}>
-                  <div className="text-title-16 font-medium text-grey-dark">{idx + 1}. {q.title}</div>
+                  <div className="text-[16px] font-medium text-grey-dark">{idx + 1}. {q.title}</div>
                   <div className="mt-3 space-y-1">
                     {q.choices.map((c) => {
                       const picked = single[q.id] === c.id;
                       const active = picked;
 
-                      const base = "w-full rounded-[3px] border px-5 py-3.25 text-left text-title-14 font-medium";
+                      const base = "w-full rounded-[3px] border px-5 py-3.25 text-left text-[14px] font-medium";
                       const cls = active
                         ? `${base} border-transparent bg-grey-light text-grey-dark`
                         : `${base} border-grey-light bg-white text-grey-dark`;
@@ -196,7 +348,7 @@ export default function SurveyPage() {
 
             return (
               <section key={q.id}>
-                <div className="text-title-16 font-medium text-grey-dark">
+                <div className="text-[16px] font-medium text-grey-dark">
                   {idx + 1}. {q.title}
                 </div>
                 <div className="mt-3">
@@ -205,9 +357,17 @@ export default function SurveyPage() {
                       <textarea
                         value={text}
                         onChange={(e) => onChangeText(e.target.value, q.maxLen)}
+                        onBlur={() => {
+                          if (!logId) return;
+                          if (textPatchTimerRef.current) {
+                            window.clearTimeout(textPatchTimerRef.current);
+                            textPatchTimerRef.current = null;
+                          }
+                          bumpPatch();
+                        }}
                         placeholder={q.placeholder}
                         maxLength={q.maxLen}
-                        className="h-23 w-full resize-none text-title-14 text-grey-dark outline-none placeholder:text-grey-light-active"
+                        className="h-23 w-full resize-none text-[14px] text-grey-dark outline-none placeholder:text-grey-light-active"
                       />
                       <div className="pointer-events-none absolute bottom-0 right-0 text-[12px] text-grey-light-active">
                         {count}
