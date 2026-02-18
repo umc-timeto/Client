@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import ConfirmModal from "@/components/ConfirmModal";
 import ActionMenu from "@/components/ActionMenu";
@@ -11,15 +11,11 @@ import EditSvg from "@/assets/edit.svg?react";
 import DeleteSvg from "@/assets/delete.svg?react";
 import MenuSvg from "@/assets/menu.svg?react";
 
-import {
-  deleteGoal,
-  getFolderLightVar,
-  getFolderNormalVar,
-  loadGoals,
-  type GoalItem,
-} from "./mock";
+import { getFolderLightVar, getFolderNormalVar } from "@/utils/ColorMapping";
 
 import { getFoldersByGoal, setFolderOrders, type FolderItem } from "@/api/folderApi";
+import { goalApi } from "@/apis/GoalPage/goal";
+import { api } from "@/apis/api";
 
 //========================
 //STEP 1: 유틸
@@ -39,14 +35,44 @@ type OpenMenu = {
   goalId: string;
 };
 
+//========================
+//STEP 2: UI에서 쓰는 Goal 타입
+//- 기존 HomePage 코드(g.title, g.color, g.id)를 유지하기 위한 변환 타입
+//========================
+type UiGoalItem = {
+  id: string;
+  title: string;
+  color: string;
+};
+
+//========================
+//STEP 3: API -> UI 변환
+//========================
+function toUiGoalItem(it: { id: number; name: string; color: string }): UiGoalItem {
+  return {
+    id: String(it.id),
+    title: it.name,
+    color: it.color,
+  };
+}
+
+//========================
+//STEP 4: 목표 삭제 API
+//- goalApi 파일은 팀장님이 같이 쓰는 중이라 건드리지 않고 여기서만 사용
+//========================
+async function deleteGoalApi(goalId: number) {
+  await api.delete(`/api/goals/${goalId}`);
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [goals, setGoals] = useState<GoalItem[]>([]);
+  const [goals, setGoals] = useState<UiGoalItem[]>([]);
   const [addSheetOpen, setAddSheetOpen] = useState(false);
 
   const [openMenu, setOpenMenu] = useState<OpenMenu | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<GoalItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<UiGoalItem | null>(null);
 
   //폴더 리렌더 트리거(로컬스토리지 기반이라 강제 리렌더 필요)
   const [folderTick, setFolderTick] = useState(0);
@@ -56,23 +82,41 @@ export default function HomePage() {
   const [draggingGoalId, setDraggingGoalId] = useState<string | null>(null);
 
   //========================
+  //STEP 1: 목표 리스트 로드(API)
+  //========================
+  const fetchGoals = useCallback(async () => {
+    try {
+      const list = await goalApi.getGoalList();
+      setGoals(list.map(toUiGoalItem));
+      setFolderTick((n) => n + 1);
+    } catch (e) {
+      console.error(e);
+      setGoals([]);
+      setFolderTick((n) => n + 1);
+    }
+  }, []);
+
+  //========================
   //초기 로드/재진입 로드
   //========================
   useEffect(() => {
-    setGoals(loadGoals());
-    setFolderTick((n) => n + 1);
-  }, []);
+    fetchGoals();
+  }, [fetchGoals]);
 
-  //홈 화면으로 돌아오면(탭 다시 활성화) 로컬스토리지 갱신 반영
+  //라우팅으로 홈 재진입 시에도 무조건 갱신(GoalPage 저장 후 돌아올 때 focus 안 바뀌는 케이스 커버)
+  useEffect(() => {
+    fetchGoals();
+  }, [location.key, fetchGoals]);
+
+  //홈 화면으로 돌아오면(탭 다시 활성화) API 갱신 반영
   useEffect(() => {
     const onFocus = () => {
-      setGoals(loadGoals());
-      setFolderTick((n) => n + 1);
+      fetchGoals();
     };
 
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, []);
+  }, [fetchGoals]);
 
   //헤더 + 버튼 이벤트 수신( AppHeaderAuto에서 쏘는 "home:add" )
   useEffect(() => {
@@ -84,7 +128,6 @@ export default function HomePage() {
   //바텀시트/모달 열리면 스크롤 잠금
   useEffect(() => {
     const anyOpen = addSheetOpen || !!deleteTarget;
-
     document.body.classList.toggle("no-scroll", anyOpen);
 
     return () => {
@@ -115,26 +158,36 @@ export default function HomePage() {
     navigate("/folder/select");
   };
 
-  const onClickEditGoal = (_g: GoalItem) => {
-    //GoalPage가 수정 모드 아직 없으니까, 일단 "새 목표 추가"로 이동만 해둠.
-    //수정 모드 붙일 때: navigate("/goal?mode=edit", { state: { goalId: g.id, title: g.title, color: g.color } })
+  const onClickEditGoal = (g: UiGoalItem) => {
     setOpenMenu(null);
-    navigate("/goal");
+
+    const q = new URLSearchParams();
+    q.set("mode", "edit");
+    q.set("goalId", g.id);
+    q.set("return", "home");
+
+    navigate(`/goal?${q.toString()}`, {
+      state: { goalId: g.id, title: g.title, color: g.color },
+    });
   };
 
-  const onClickDeleteGoal = (g: GoalItem) => {
+  const onClickDeleteGoal = (g: UiGoalItem) => {
     setOpenMenu(null);
     setDeleteTarget(g);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
 
-    deleteGoal(deleteTarget.id);
-    setGoals(loadGoals());
+    try {
+      await deleteGoalApi(Number(deleteTarget.id));
+    } catch (e) {
+      console.error(e);
+    }
+
     setDeleteTarget(null);
-    setFolderTick((n) => n + 1);
-  };
+    fetchGoals();
+  }, [deleteTarget, fetchGoals]);
 
   //========================
   //폴더 이동
@@ -163,7 +216,7 @@ export default function HomePage() {
   //========================
   //폴더 클릭 이동
   //========================
-  const goFolderPage = (g: GoalItem, f: FolderItem) => {
+  const goFolderPage = (g: UiGoalItem, f: FolderItem) => {
     const q = new URLSearchParams();
     q.set("folderId", f.id);
     q.set("folderName", f.name);
@@ -242,9 +295,7 @@ export default function HomePage() {
                         onClick={onClickAddFolder}
                       >
                         <span className="text-grey-light-active text-[18px] leading-none">+</span>
-                        <span className="text-[15px] font-semibold text-grey-light-active">
-                          폴더를 추가하세요
-                        </span>
+                        <span className="text-[15px] font-semibold text-grey-light-active">폴더를 추가하세요</span>
                       </button>
                     </>
                   ) : (
@@ -324,9 +375,7 @@ export default function HomePage() {
                 </button>
               </div>
 
-              <div className="mt-2 body-13-medium text-yellow-normal">
-                새로운 목표 또는 폴더를 추가하세요
-              </div>
+              <div className="mt-2 body-13-medium text-yellow-normal">새로운 목표 또는 폴더를 추가하세요</div>
 
               <div className="mt-4 flex gap-3">
                 <button

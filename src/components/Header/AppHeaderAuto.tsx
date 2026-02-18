@@ -51,6 +51,7 @@ export default function AppHeaderAuto({ onOpenDrawer }: AppHeaderAutoProps) {
   };
 
   const goBack = () => navigate(-1);
+  const goHome = () => navigate("/home");
 
   const requestTimeBlockCreateSave = () => {
     window.dispatchEvent(new CustomEvent("timeblockCreate:save"));
@@ -143,7 +144,7 @@ export default function AppHeaderAuto({ onOpenDrawer }: AppHeaderAutoProps) {
       <HeaderBase
         title={folderName}
         left={
-          <HeaderIconButton ariaLabel="prev" onClick={goBack}>
+          <HeaderIconButton ariaLabel="prev" onClick={goHome}>
             <PrevSvg className="h-7 w-7" />
           </HeaderIconButton>
         }

@@ -320,22 +320,20 @@ export default function FolderPage() {
   //========================
   const goFolderEdit = () => {
     const q = new URLSearchParams();
+    q.set("mode", "edit"); 
+    q.set("step", "2");        
     q.set("canSave", "0");
-    q.set("step", "2");
-    if (goalId) q.set("goalId", goalId);
 
+    if (goalId) q.set("goalId", goalId);
     q.set("folderId", folderId);
     q.set("folderName", String(folderName));
 
     setMenuOpen(false);
     navigate(`/folder/select?${q.toString()}`, {
-      state: {
-        goalId,
-        folderId,
-        folderName,
-      },
+      state: { goalId, folderId, folderName },
     });
   };
+
 
   const deleteFolder = async () => {
     //API 붙기 전: 화면만 빠져나감
