@@ -1,11 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import TimePickerModel from "@/components/TimePickerModel";
 import UnderlineBox from "@/components/UnderlineBox";
-import type { TaskCreateInput, TaskPriority } from "@/types/task";
-import { mockTasks } from "./mock";
-import { createTask, ensureMockSeed, getTaskById, updateTask } from "@/api/taskApi";
+
+import type { TaskPriority } from "@/types/task";
+import { apiPriorityToUi, uiPriorityToApi, apiDurationToMinutes, minutesToApiDuration } from "@/types/task";
+
 import { useHeaderActions } from "@/contexts/HeaderActionContext";
+import { taskApi } from "@/apis/TaskPage/task.api";
+
+type TaskDraft = {
+  folderId: string;
+  title: string;
+  durationMinutes: number;
+  priority: TaskPriority;
+};
 
 function formatDuration(hours: number, minutes: number) {
   if (hours === 0 && minutes === 0) return "";
@@ -16,132 +25,157 @@ function formatDuration(hours: number, minutes: number) {
 
 export default function TaskPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { setOnComplete } = useHeaderActions();
 
   //========================
-  //STEP1 쿼리 파라미터(모드/폴더/리턴)
+  //쿼리 파라미터(폴더/리턴/모드)
   //========================
-  const folderId = searchParams.get("folderId") ?? "f1";
+  const folderId = searchParams.get("folderId") ?? "";
   const folderName = searchParams.get("folderName") ?? "폴더";
   const taskId = searchParams.get("taskId") ?? null;
   const returnTo = searchParams.get("return") ?? null;
 
+  const folderIdNum = Number(folderId);
+
   //========================
-  //STEP1 폴더 복귀 시 모달 오픈용 쿼리 키
+  //✅ goal 정보도 같이 들고 다니기(쿼리 + state)
+  //========================
+  const goalIdFromState = (location.state as { goalId?: string } | null)?.goalId;
+  const goalNameFromState = (location.state as { goalName?: string } | null)?.goalName;
+  const goalColorFromState = (location.state as { goalColor?: string } | null)?.goalColor;
+
+  const goalIdFromQuery = searchParams.get("goalId") ?? undefined;
+  const goalNameFromQuery = searchParams.get("goalName") ?? undefined;
+  const goalColorFromQuery = searchParams.get("goalColor") ?? undefined;
+
+  const goalId = goalIdFromState ?? goalIdFromQuery ?? null;
+  const goalName = goalNameFromState ?? goalNameFromQuery ?? undefined;
+  const goalColor = goalColorFromState ?? goalColorFromQuery ?? undefined;
+
+  //========================
+  //모달 오픈 쿼리 키
   //========================
   const OPEN_TASK_QUERY_KEY = "openTaskId";
 
   //========================
-  //앱 최초 1회: localStorage에 더미 시드
-  //========================
-  useEffect(() => {
-    ensureMockSeed(mockTasks);
-  }, []);
-
-  //========================
-  //URL 쿼리로 step 제어 (1: 입력 / 2: 중요도)
+  //step
   //========================
   const stepRaw = searchParams.get("step");
   const step = Number(stepRaw ?? "1");
-  const safeStep = step === 2 ? 2 : 1; //step은 1/2만 허용
+  const safeStep = step === 2 ? 2 : 1;
 
   //========================
-  //STEP1 입력값
+  //입력값
   //========================
   const [title, setTitle] = useState("");
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(0);
 
   //========================
-  //STEP2 선택값
+  //선택값
   //========================
   const [priority, setPriority] = useState<TaskPriority | null>(null);
 
   //========================
-  //시간 선택 모달
+  //모달
   //========================
   const [timeModalOpen, setTimeModalOpen] = useState(false);
 
   //========================
-  //편집 모드 초기 로드(프리필)
+  //프리필 완료 여부
   //========================
   const [prefilled, setPrefilled] = useState(false);
 
+  //========================
+  //✅ 폴더 복귀 URL(항상 goal 포함)
+  //========================
+  const buildFolderBaseUrl = useCallback(() => {
+    const q = new URLSearchParams();
+    q.set("folderId", folderId);
+    q.set("folderName", String(folderName));
+    if (goalId) q.set("goalId", goalId);
+    if (goalName) q.set("goalName", goalName);
+    if (goalColor) q.set("goalColor", goalColor);
+    return `/folder?${q.toString()}`;
+  }, [folderId, folderName, goalId, goalName, goalColor]);
+
+  const buildFolderReturnUrl = useCallback(
+    (openId: string) => {
+      const q = new URLSearchParams();
+      q.set("folderId", folderId);
+      q.set("folderName", String(folderName));
+      if (goalId) q.set("goalId", goalId);
+      if (goalName) q.set("goalName", goalName);
+      if (goalColor) q.set("goalColor", goalColor);
+      q.set(OPEN_TASK_QUERY_KEY, openId);
+      return `/folder?${q.toString()}`;
+    },
+    [folderId, folderName, goalId, goalName, goalColor]
+  );
+
+  //========================
+  //편집모드 프리필
+  //========================
   useEffect(() => {
-    //STEP1 create 모드면 프리필 불필요
+    if (!folderId || !Number.isFinite(folderIdNum)) {
+      navigate("/home", { replace: true });
+      return;
+    }
+
     if (!taskId) {
       setPrefilled(true);
       return;
     }
 
-    //STEP1 이미 프리필 됐으면 재로딩 방지
     if (prefilled) return;
 
     (async () => {
-      const t = await getTaskById(taskId);
-      if (!t) {
-        //STEP1 taskId가 잘못된 경우 폴더로 복귀
-        navigate(
-          `/folder?folderId=${encodeURIComponent(folderId)}&folderName=${encodeURIComponent(String(folderName))}`,
-          { state: { folderId, folderName }, replace: true }
-        );
-        return;
+      try {
+        const todoId = Number(taskId);
+        if (!Number.isFinite(todoId)) {
+          navigate(buildFolderBaseUrl(), { replace: true });
+          return;
+        }
+
+        const dto = await taskApi.getTodo(todoId);
+
+        setTitle(dto.name ?? "");
+        const total = apiDurationToMinutes(dto.duration ?? "");
+        setHours(Math.floor(total / 60));
+        setMinutes(total % 60);
+        setPriority(apiPriorityToUi(dto.priority));
+
+        setPrefilled(true);
+      } catch (e) {
+        console.error(e);
+        navigate(buildFolderBaseUrl(), { replace: true });
       }
-
-      //STEP1 기본 값 프리필
-      setTitle(t.title ?? "");
-      const total = Math.max(0, t.durationMinutes ?? 0);
-      setHours(Math.floor(total / 60));
-      setMinutes(total % 60);
-      setPriority((t.priority ?? null) as TaskPriority | null);
-
-      setPrefilled(true);
     })();
-  }, [taskId, prefilled, folderId, folderName, navigate]);
+  }, [folderId, folderIdNum, taskId, prefilled, navigate, buildFolderBaseUrl]);
 
-  //========================
-  //표시용(예: "1시간 20분", "20분")
-  //========================
   const durationText = useMemo(() => formatDuration(hours, minutes), [hours, minutes]);
-
-  //========================
-  //STEP1 라벨/라인 강조용
-  //========================
   const titleActive = title.trim().length > 0;
   const durationActive = durationText.length > 0;
 
-  //========================
-  //헤더(AppHeaderAuto) 버튼 활성화 판단용
-  //========================
   const canNext = titleActive && durationActive;
   const canSave = priority !== null;
 
-  //========================
-  //저장 payload(추가/수정 공용)
-  //========================
   const durationMinutes = useMemo(() => hours * 60 + minutes, [hours, minutes]);
 
-  const createInput: TaskCreateInput | null = useMemo(() => {
+  const draft: TaskDraft | null = useMemo(() => {
     if (!canSave) return null;
-    return {
-      folderId,
-      title: title.trim(),
-      durationMinutes,
-      priority: priority!, //canSave면 null 아님
-    };
+    return { folderId, title: title.trim(), durationMinutes, priority: priority! };
   }, [canSave, folderId, title, durationMinutes, priority]);
 
   //========================
-  //헤더(AppHeaderAuto)가 참조하는
-  //canNext / canSave를 URL 쿼리에 반영
+  //canNext/canSave 쿼리 반영(프리필 이후만)
   //========================
   useEffect(() => {
-    //STEP1 프리필 전에는 쿼리 반영을 늦춰서 버튼 깜빡임 방지
     if (!prefilled) return;
 
     const next = new URLSearchParams(searchParams);
-
     if (!next.get("step")) next.set("step", "1");
 
     if (safeStep >= 2) {
@@ -155,112 +189,99 @@ export default function TaskPage() {
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefilled, canNext, canSave, safeStep]);
+  }, [prefilled, safeStep, canNext, canSave, searchParams, setSearchParams]);
 
   //========================
-  //STEP2 폴더 복귀 URL 생성
-  //========================
-  const buildFolderReturnUrl = (openId: string) => {
-    const q = new URLSearchParams();
-    q.set("folderId", folderId);
-    q.set("folderName", String(folderName));
-    q.set(OPEN_TASK_QUERY_KEY, openId);
-    return `/folder?${q.toString()}`;
-  };
-
-  //========================
-  //헤더 "저장" 버튼 동작 등록
+  //저장 동작 등록
   //========================
   useEffect(() => {
     const handleSave = async () => {
-      //STEP2가 아니면 저장 동작 무시
       if (safeStep < 2) return;
       if (!prefilled) return;
+      if (!folderId || !Number.isFinite(folderIdNum)) return;
 
-      //STEP2 edit 모드
-      if (taskId) {
-        if (!canSave) return;
+      try {
+        //edit
+        if (taskId) {
+          if (!draft) return;
+          const todoId = Number(taskId);
+          if (!Number.isFinite(todoId)) return;
 
-        await updateTask(taskId, {
-          title: title.trim(),
-          durationMinutes,
-          priority: priority!,
-        });
+          await taskApi.updateTodo(todoId, {
+            name: draft.title,
+            priority: uiPriorityToApi(draft.priority),
+            duration: minutesToApiDuration(draft.durationMinutes),
+          });
 
-        //STEP2 폴더 모달로 복귀
-        if (returnTo === "folder") {
-          navigate(buildFolderReturnUrl(taskId), { state: { folderId, folderName } });
+          const to = returnTo === "folder" ? buildFolderReturnUrl(taskId) : buildFolderBaseUrl();
+          navigate(to, {
+            replace: true,
+            state: { folderId, folderName, goalId, goalName, goalColor },
+          });
           return;
         }
 
-        navigate("/folder");
-        return;
+        //create
+        if (!draft) return;
+
+        const created = await taskApi.addTodo(folderIdNum, {
+          name: draft.title,
+          priority: uiPriorityToApi(draft.priority),
+          duration: minutesToApiDuration(draft.durationMinutes),
+        });
+
+        const createdId = String(created.todoId ?? "");
+        const to = returnTo === "folder" ? buildFolderReturnUrl(createdId) : buildFolderBaseUrl();
+
+        navigate(to, {
+          replace: true,
+          state: { folderId, folderName, goalId, goalName, goalColor },
+        });
+      } catch (e) {
+        console.error(e);
       }
-
-      //STEP2 create 모드
-      if (!createInput) return;
-      const created = await createTask(createInput);
-
-      if (returnTo === "folder") {
-        navigate(buildFolderReturnUrl(created.id), { state: { folderId, folderName } });
-        return;
-      }
-
-      navigate("/folder");
     };
 
-    //STEP2 실행하지 말고, "함수 자체"만 등록
     setOnComplete(() => handleSave);
-
-    //STEP2 페이지 이탈 시 헤더 동작 해제
     return () => setOnComplete(null);
   }, [
     setOnComplete,
     safeStep,
     prefilled,
     taskId,
-    canSave,
-    title,
-    durationMinutes,
-    priority,
-    createInput,
+    draft,
     returnTo,
     navigate,
     folderId,
     folderName,
+    folderIdNum,
+    buildFolderReturnUrl,
+    buildFolderBaseUrl,
+    goalId,
+    goalName,
+    goalColor,
   ]);
 
   //========================
-  //STEP 1: 할 일 입력
+  //STEP1
   //========================
   if (safeStep < 2) {
     return (
       <div className="bg-white px-5 pt-8">
-        {/*상단 안내 타이틀*/}
         <h1 className="text-[24px] font-bold leading-[33.6px] text-black">
           매우 작은 단위의
           <br />
           할 일을 만들어주세요
         </h1>
 
-        {/*상단 안내 서브 텍스트*/}
         <p className="mt-2 font-pretendard text-[14px] font-medium leading-normal text-green-normal">
           부담 없이 도전할 수 있는 일부터 시작해요
         </p>
 
-        {/*할 일 이름 입력*/}
         <div className="mt-10">
-          <UnderlineBox
-            label="할 일 이름"
-            active={titleActive}
-            mode="input"
-            inputValue={title}
-            onInputChange={(v) => setTitle(v)}
-          />
+          <UnderlineBox label="할 일 이름" active={titleActive} mode="input" inputValue={title} onInputChange={setTitle} />
         </div>
 
-        {/*예상 소요 시간 선택*/}
         <div className="mt-10">
           <UnderlineBox
             label="예상 소요 시간"
@@ -271,7 +292,6 @@ export default function TaskPage() {
           />
         </div>
 
-        {/*소요 시간 휠 모달*/}
         <TimePickerModel
           open={timeModalOpen}
           initialHours={hours}
@@ -288,23 +308,20 @@ export default function TaskPage() {
   }
 
   //========================
-  //STEP 2: 중요도 선택
+  //STEP2
   //========================
   return (
     <div className="bg-white px-5 pt-8">
-      {/*상단 안내 타이틀*/}
       <h1 className="text-[24px] font-bold leading-[33.6px] text-black">
         이 할 일의
         <br />
         중요도를 선택해주세요
       </h1>
 
-      {/*상단 안내 서브 텍스트*/}
       <p className="mt-2 font-pretendard text-[14px] font-medium leading-normal text-green-normal">
         중요한 일부터 차근차근 해결해요
       </p>
 
-      {/*중요도 선택 리스트*/}
       <div className="mt-12 flex flex-col gap-4">
         {(["상", "중", "하"] as const).map((p) => {
           const selected = priority === p;
@@ -320,9 +337,7 @@ export default function TaskPage() {
                 selected ? "bg-[#F1F1F1]" : "bg-transparent",
               ].join(" ")}
             >
-              <span className="font-pretendard text-[16px] font-semibold leading-normal text-gray-700">
-                {p}
-              </span>
+              <span className="font-pretendard text-[16px] font-semibold leading-normal text-gray-700">{p}</span>
 
               <span
                 className={[
@@ -330,9 +345,7 @@ export default function TaskPage() {
                   selected ? "border-[#B0B0B0] bg-[#B0B0B0]" : "border-[#B0B0B0] bg-transparent",
                 ].join(" ")}
               >
-                {selected ? (
-                  <span className="text-gray-100 text-[12px] leading-none">✓</span>
-                ) : null}
+                {selected ? <span className="text-gray-100 text-[12px] leading-none">✓</span> : null}
               </span>
             </button>
           );

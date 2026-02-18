@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+//C:\Users\tndus\Client\src\pages\FolderPage\FolderPage.tsx
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import type { Task } from "@/types/task";
-import { deleteTask, ensureMockSeed, getTasksByFolder, setTasksByFolder } from "@/api/taskApi";
-import { mockTasks } from "@/pages/TaskPage/mock";
 
 import ActionMenu from "@/components/ActionMenu";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -19,11 +18,12 @@ import NextDarkSvg from "@/assets/next-dark.svg?react";
 import FProgressSvg from "@/assets/f_progress.svg?react";
 import FDoneSvg from "@/assets/f_done.svg?react";
 
-//✅ 폴더 API (서버)
 import { folderApi } from "@/apis/FolderPage/folder.api";
+import { taskApi } from "@/apis/TaskPage/task.api";
+import type { ApiPriority, ApiTodoState, TodoSummaryDto } from "@/apis/TaskPage/task.types";
 
 //========================
-//STEP 1: 유틸
+//유틸
 //========================
 function formatDuration(minutes: number) {
   const m = Math.max(0, minutes ?? 0);
@@ -46,7 +46,6 @@ function reorderByIds(list: Task[], fromId: string, toId: string) {
 }
 
 function PlusGreenIcon() {
-  //요구한 + svg (stroke #00B1A6)
   return (
     <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
       <path
@@ -69,15 +68,71 @@ function PlusGreyRotateIcon() {
 }
 
 //========================
-//STEP 2: 페이지
+//API <-> UI 매핑
 //========================
+function apiPriorityToUi(p: ApiPriority): Task["priority"] {
+  if (p === "HIGH") return "상";
+  if (p === "MEDIUM") return "중";
+  return "하";
+}
+
+function parseApiDurationToMinutes(v: string | null | undefined): number {
+  const s = String(v ?? "").trim();
+  if (!s) return 0;
+
+  const hMatch = s.match(/(\d+)\s*H/i);
+  const mMatch = s.match(/(\d+)\s*M/i);
+
+  const h = hMatch ? Number(hMatch[1]) : 0;
+  const m = mMatch ? Number(mMatch[1]) : 0;
+
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return 0;
+  return Math.max(0, h * 60 + m);
+}
+
+//========================
+//✅ 날짜 표시 유틸 (01/31 (토))
+//- startAt 없으면 렌더 자체 안 함
+//========================
+const WEEK_KOR = ["일", "월", "화", "수", "목", "금", "토"] as const;
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+function formatMMDD(d: Date) {
+  return `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`;
+}
+function formatHHMM(d: Date) {
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function formatMMDD_DOW(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${formatMMDD(d)} (${WEEK_KOR[d.getDay()]})`;
+}
+
+type UiTaskWithOrder = Task & { _sortOrder?: number; _startAt?: string | null };
+
+function toUiTaskFromSummary(dto: TodoSummaryDto, state: ApiTodoState): UiTaskWithOrder {
+  return {
+    id: String(dto.todoId),
+    folderId: "",
+    title: dto.name,
+    durationMinutes: parseApiDurationToMinutes(dto.duration),
+    priority: apiPriorityToUi(dto.priority),
+    isDone: state === "complete",
+    _sortOrder: dto.sortOrder,
+    _startAt: dto.startAt ?? null,
+  };
+}
+
 export default function FolderPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
 
   //========================
-  //STEP2 폴더/목표 정보
+  //폴더/목표 정보
   //========================
   const folderId = searchParams.get("folderId") ?? "";
   const folderIdNum = Number(folderId);
@@ -98,7 +153,6 @@ export default function FolderPage() {
   const goalColorFromQuery = searchParams.get("goalColor") ?? undefined;
   const goalColor = goalColorFromState ?? goalColorFromQuery ?? "#00B1A6";
 
-  //folderId 없으면 홈으로(방어)
   useEffect(() => {
     if (!folderId) {
       navigate("/home", { replace: true });
@@ -111,12 +165,11 @@ export default function FolderPage() {
   }, [folderId]);
 
   //========================
-  //STEP2 폴더 액션 메뉴/삭제 모달
+  //메뉴/모달
   //========================
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
-  //AppHeaderAuto에서 쏘는 "folder:menu" 수신
   useEffect(() => {
     const onOpen = () => setMenuOpen(true);
     window.addEventListener("folder:menu", onOpen as any);
@@ -124,61 +177,69 @@ export default function FolderPage() {
   }, []);
 
   //========================
-  //STEP2 목록 상태
+  //목록 상태
   //========================
-  const [progressTasks, setProgressTasks] = useState<Task[]>([]);
-  const [doneTasks, setDoneTasks] = useState<Task[]>([]);
+  const [progressTasks, setProgressTasks] = useState<UiTaskWithOrder[]>([]);
+  const [doneTasks, setDoneTasks] = useState<UiTaskWithOrder[]>([]);
 
   //========================
-  //STEP2 드래그 상태
+  //드래그 상태
   //========================
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingSection, setDraggingSection] = useState<"progress" | "done" | null>(null);
 
   //========================
-  //STEP2 할 일 정보 모달
+  //할 일 정보 모달
   //========================
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const modalPanelRef = useRef<HTMLDivElement | null>(null);
 
   const openTask = useMemo(() => {
     if (!openTaskId) return null;
-    return (
-      progressTasks.find((t) => t.id === openTaskId) ??
-      doneTasks.find((t) => t.id === openTaskId) ??
-      null
-    );
+    return progressTasks.find((t) => t.id === openTaskId) ?? doneTasks.find((t) => t.id === openTaskId) ?? null;
   }, [openTaskId, progressTasks, doneTasks]);
 
   //========================
-  //STEP3 초기 로드/리로드 (Task는 아직 로컬)
+  //✅ 모달 상단 시간 표시용 detail 상태
   //========================
-  const load = async () => {
-    ensureMockSeed(mockTasks);
+  const [modalTimeText, setModalTimeText] = useState<string>("-");
+  const [modalDateText, setModalDateText] = useState<string>("--/--");
 
-    const list = await getTasksByFolder(folderId);
-    const p = list.filter((t) => !t.isDone);
-    const d = list.filter((t) => t.isDone);
+  //========================
+  //서버 로드
+  //========================
+  const load = useCallback(async () => {
+    if (!Number.isFinite(folderIdNum)) return;
 
-    setProgressTasks(p);
-    setDoneTasks(d);
-  };
+    try {
+      const [pRes, dRes] = await Promise.all([taskApi.getProgressTodos(folderIdNum), taskApi.getCompleteTodos(folderIdNum)]);
+
+      const p = (pRes.todos ?? []).map((it) => toUiTaskFromSummary(it, "progress"));
+      const d = (dRes.todos ?? []).map((it) => toUiTaskFromSummary(it, "complete"));
+
+      setProgressTasks(p);
+      setDoneTasks(d);
+    } catch (e) {
+      console.error(e);
+      setProgressTasks([]);
+      setDoneTasks([]);
+    }
+  }, [folderIdNum]);
 
   useEffect(() => {
     if (!folderId) return;
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [folderId, location.key]);
+  }, [folderId, location.key, load]);
 
   //========================
-  //STEP3 쿼리로 모달 자동 오픈
+  //쿼리로 모달 자동 오픈
   //========================
   const modalTaskIdFromQuery = searchParams.get("modalTaskId") ?? searchParams.get("openTaskId");
 
   useEffect(() => {
     if (!modalTaskIdFromQuery) return;
 
-    setOpenTaskId(modalTaskIdFromQuery);
+    setOpenTaskId(String(modalTaskIdFromQuery));
 
     const next = new URLSearchParams(searchParams);
     next.delete("modalTaskId");
@@ -189,7 +250,48 @@ export default function FolderPage() {
   }, [modalTaskIdFromQuery]);
 
   //========================
-  //STEP3 모달/모달류 열림 시 스크롤 잠금
+  //✅ openTaskId가 열리면 detail 조회해서 시간/날짜 계산
+  //========================
+  useEffect(() => {
+    if (!openTaskId) {
+      setModalTimeText("00:00-00:00");
+      setModalDateText("--/--");
+      return;
+    }
+
+    const todoId = Number(openTaskId);
+    if (!Number.isFinite(todoId)) {
+      setModalTimeText("00:00-00:00");
+      setModalDateText("--/--");
+      return;
+    }
+
+    (async () => {
+      try {
+        const dto = await taskApi.getTodo(todoId);
+
+        if (!dto.startAt) {
+          setModalTimeText("00:00-00:00");
+          setModalDateText("--/--");
+          return;
+        }
+
+        const start = new Date(dto.startAt);
+        const minutes = parseApiDurationToMinutes(dto.duration);
+        const end = new Date(start.getTime() + minutes * 60 * 1000);
+
+        setModalDateText(formatMMDD(start));
+        setModalTimeText(`${formatHHMM(start)} - ${formatHHMM(end)}`);
+      } catch (e) {
+        console.error(e);
+        setModalTimeText("-");
+        setModalDateText("--/--");
+      }
+    })();
+  }, [openTaskId]);
+
+  //========================
+  //스크롤 잠금
   //========================
   useEffect(() => {
     const anyOpen = Boolean(openTaskId) || deleteConfirmOpen || menuOpen;
@@ -201,96 +303,92 @@ export default function FolderPage() {
   }, [openTaskId, deleteConfirmOpen, menuOpen]);
 
   //========================
-  //STEP3 저장(로컬스토리지 반영) - Task는 아직 로컬
-  //========================
-  const persist = async (nextProgress: Task[], nextDone: Task[]) => {
-    await setTasksByFolder(folderId, [...nextProgress, ...nextDone]);
-  };
-
-  //========================
-  //STEP3 할 일 추가 이동
+  //✅ 할 일 추가 이동(goal 정보 같이 넘김)
   //========================
   const goTaskAdd = () => {
-    navigate(
-      `/task?step=1&folderId=${encodeURIComponent(folderId)}&folderName=${encodeURIComponent(
-        String(folderName)
-      )}&return=folder`,
-      { state: { folderId, folderName } }
-    );
+    const q = new URLSearchParams();
+    q.set("step", "1");
+    q.set("folderId", folderId);
+    q.set("folderName", String(folderName));
+    q.set("return", "folder");
+    if (goalId) q.set("goalId", goalId);
+    q.set("goalName", goalName);
+    q.set("goalColor", goalColor);
+
+    navigate(`/task?${q.toString()}`, {
+      state: { folderId, folderName, goalId, goalName, goalColor },
+    });
   };
 
-  //========================
-  //STEP3 모달 닫기
-  //========================
   const closeModal = () => setOpenTaskId(null);
 
-  //========================
-  //STEP3 완료 토글(모달 버튼)
-  //========================
+  //완료 토글
   const toggleDoneFromModal = async () => {
     if (!openTask) return;
+    const todoId = Number(openTask.id);
+    if (!Number.isFinite(todoId)) return;
 
-    if (openTask.isDone) {
-      //완료 -> 진행
-      const nextDone = doneTasks.filter((t) => t.id !== openTask.id);
-      const nextProgress = [...progressTasks, { ...openTask, isDone: false }];
-      setDoneTasks(nextDone);
-      setProgressTasks(nextProgress);
-      await persist(nextProgress, nextDone);
+    try {
+      await taskApi.updateTodoStatus(todoId, { state: openTask.isDone ? "progress" : "complete" });
       closeModal();
-      return;
+      await load();
+    } catch (e) {
+      console.error(e);
     }
-
-    //진행 -> 완료
-    const nextProgress = progressTasks.filter((t) => t.id !== openTask.id);
-    const nextDone = [...doneTasks, { ...openTask, isDone: true }];
-    setProgressTasks(nextProgress);
-    setDoneTasks(nextDone);
-    await persist(nextProgress, nextDone);
-    closeModal();
   };
 
-  //========================
-  //STEP3 삭제(모달 버튼)
-  //========================
+  //삭제
   const removeFromModal = async () => {
     if (!openTask) return;
+    const todoId = Number(openTask.id);
+    if (!Number.isFinite(todoId)) return;
 
-    await deleteTask(openTask.id);
-
-    const nextProgress = progressTasks.filter((t) => t.id !== openTask.id);
-    const nextDone = doneTasks.filter((t) => t.id !== openTask.id);
-    setProgressTasks(nextProgress);
-    setDoneTasks(nextDone);
-
-    closeModal();
+    try {
+      await taskApi.deleteTodo(todoId);
+      closeModal();
+      await load();
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   //========================
-  //STEP3 편집 이동(모달 클릭 영역)
+  //✅ 편집 이동(goal 정보 같이 넘김)
   //========================
   const goEditStep1 = () => {
     if (!openTask) return;
-    navigate(
-      `/task?step=1&folderId=${encodeURIComponent(folderId)}&folderName=${encodeURIComponent(
-        String(folderName)
-      )}&taskId=${encodeURIComponent(openTask.id)}&return=folder`,
-      { state: { folderId, folderName } }
-    );
+
+    const q = new URLSearchParams();
+    q.set("step", "1");
+    q.set("folderId", folderId);
+    q.set("folderName", String(folderName));
+    q.set("taskId", String(openTask.id));
+    q.set("return", "folder");
+    if (goalId) q.set("goalId", goalId);
+    q.set("goalName", goalName);
+    q.set("goalColor", goalColor);
+
+    navigate(`/task?${q.toString()}`, { state: { folderId, folderName, goalId, goalName, goalColor } });
   };
 
   const goEditStep2 = () => {
     if (!openTask) return;
-    navigate(
-      `/task?step=2&folderId=${encodeURIComponent(folderId)}&folderName=${encodeURIComponent(
-        String(folderName)
-      )}&taskId=${encodeURIComponent(openTask.id)}&return=folder`,
-      { state: { folderId, folderName } }
-    );
+
+    const q = new URLSearchParams();
+    q.set("step", "2");
+    q.set("folderId", folderId);
+    q.set("folderName", String(folderName));
+    q.set("taskId", String(openTask.id));
+    q.set("return", "folder");
+    if (goalId) q.set("goalId", goalId);
+    q.set("goalName", goalName);
+    q.set("goalColor", goalColor);
+
+    navigate(`/task?${q.toString()}`, { state: { folderId, folderName, goalId, goalName, goalColor } });
   };
 
   //========================
-  //STEP3 드래그 핸들러
+  //드래그
   //========================
   const onDragStart = (taskId: string, section: "progress" | "done") => {
     setDraggingId(taskId);
@@ -303,42 +401,50 @@ export default function FolderPage() {
   };
 
   const onDropOnItem = async (targetId: string, section: "progress" | "done") => {
-    //박스 간 드래그 이동 금지
     if (!draggingId || !draggingSection) return;
     if (draggingSection !== section) return;
     if (draggingId === targetId) return;
 
-    if (section === "progress") {
-      const nextProgress = reorderByIds(progressTasks, draggingId, targetId);
-      setProgressTasks(nextProgress);
-      await persist(nextProgress, doneTasks);
-      return;
-    }
+    const list = section === "progress" ? progressTasks : doneTasks;
 
-    const nextDone = reorderByIds(doneTasks, draggingId, targetId);
-    setDoneTasks(nextDone);
-    await persist(progressTasks, nextDone);
+    const from = list.find((t) => t.id === draggingId);
+    const to = list.find((t) => t.id === targetId);
+    if (!from || !to) return;
+
+    const next = reorderByIds(list, draggingId, targetId);
+    if (section === "progress") setProgressTasks(next as UiTaskWithOrder[]);
+    else setDoneTasks(next as UiTaskWithOrder[]);
+
+    const todoId = Number(draggingId);
+    if (!Number.isFinite(todoId)) return;
+
+    const targetIndex = next.findIndex((t) => t.id === targetId);
+    const targetOrder = typeof (to as UiTaskWithOrder)._sortOrder === "number" ? (to as UiTaskWithOrder)._sortOrder! : targetIndex + 1;
+
+    try {
+      await taskApi.updateTodoOrder(todoId, { targetOrder });
+      await load();
+    } catch (e) {
+      console.error(e);
+      await load();
+    }
   };
 
-  //========================
-  //STEP3 카운트
-  //========================
   const progressCount = useMemo(() => progressTasks.length, [progressTasks]);
   const doneCount = useMemo(() => doneTasks.length, [doneTasks]);
 
   //========================
-  //STEP3 폴더 수정/삭제 (서버 API 연동)
+  //폴더 수정/삭제
   //========================
   const goFolderEdit = () => {
-    //FolderSelectPage edit 프리필은 goalId가 필수라서 같이 넘김
     const q = new URLSearchParams();
     q.set("mode", "edit");
     q.set("step", "2");
     q.set("canSave", "0");
 
     if (goalId) q.set("goalId", goalId);
-    if (goalName) q.set("goalName", goalName);
-    if (goalColor) q.set("goalColor", goalColor);
+    q.set("goalName", goalName);
+    q.set("goalColor", goalColor);
 
     q.set("folderId", folderId);
     q.set("folderName", String(folderName));
@@ -359,26 +465,22 @@ export default function FolderPage() {
 
     try {
       await folderApi.deleteFolder(folderIdNum);
-      //삭제 후 홈으로(홈은 location.key/focus로 갱신도 하고 있어서 안전)
       navigate("/home", { replace: true });
     } catch (e) {
       console.error(e);
-      //실패해도 일단 화면은 유지(원하면 토스트/알림 추가)
     }
   };
 
   //========================
-  //STEP4 렌더
+  //렌더
   //========================
   return (
     <div className="bg-white px-5 pt-6 pb-24">
-      {/*헤더 아래 목표 표시(중앙)*/}
       <div className="mb-6 flex items-center justify-center gap-2">
         <FlagSvg className="h-4 w-4" style={{ color: goalColor }} />
         <span className="text-[12px] font-semibold text-[#3A3A3A]">{goalName}</span>
       </div>
 
-      {/*폴더 메뉴(ActionMenu)*/}
       <ActionMenu
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
@@ -392,19 +494,14 @@ export default function FolderPage() {
         className="right-5 top-25"
       />
 
-      {/*========================
-        진행 섹션
-      ========================*/}
+      {/* 진행 섹션 */}
       <div className="flex gap-3">
-        {/*왼쪽 레일*/}
         <div className="flex w-4 flex-col items-center">
           <FProgressSvg className="h-6 w-6" />
           <div className="mt-2 flex-1 w-px border-l border-dotted border-[#B0E7E3]" />
         </div>
 
-        {/*오른쪽 컨텐츠*/}
         <div className="min-w-0 flex-1">
-          {/*섹션 헤더*/}
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2 text-[14px] font-semibold text-[#00857D]">
               <span>{`진행 (${progressCount}개)`}</span>
@@ -422,7 +519,6 @@ export default function FolderPage() {
             </button>
           </div>
 
-          {/*리스트 박스*/}
           {progressCount === 0 ? (
             <button
               type="button"
@@ -450,17 +546,21 @@ export default function FolderPage() {
                     onClick={() => setOpenTaskId(t.id)}
                     className="flex w-full items-center justify-between px-4 py-6 text-left hover:bg-green-light-hover active:bg-green-light-active"
                   >
-                    {/*왼쪽*/}
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       <MenuGreenSvg className="h-[11.25px] w-3" />
+
                       <div className="min-w-0">
-                        <div className="truncate text-[15px] font-semibold leading-[150%] text-[#2C2C2C]">
-                          {t.title}
-                        </div>
+                        <div className="truncate text-[15px] font-semibold leading-[150%] text-[#2C2C2C]">{t.title}</div>
+
+                        {/* ✅ startAt 있을 때만 날짜 표시 */}
+                        {t._startAt ? (
+                          <div className="mt-1 font-pretendard text-[13px] font-normal leading-[150%] text-[#00857D]">
+                            {formatMMDD_DOW(t._startAt)}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
 
-                    {/*오른쪽*/}
                     <div className="flex items-center gap-2">
                       <span className="flex h-5.5 w-5.5 items-center justify-center rounded-xs bg-[#00B1A6] text-[12px] font-semibold leading-[120%] text-white">
                         {t.priority}
@@ -478,20 +578,15 @@ export default function FolderPage() {
         </div>
       </div>
 
-      {/*========================
-        완료 섹션
-      ========================*/}
+      {/* 완료 섹션 */}
       {doneCount > 0 && (
         <div className="mt-8 flex gap-3">
-          {/*왼쪽 레일*/}
           <div className="flex w-4 flex-col items-center">
             <FDoneSvg className="h-4 w-4" />
             <div className="mt-2 flex-1 w-px border-l border-dotted border-[#FFE7B0]" />
           </div>
 
-          {/*오른쪽 컨텐츠*/}
           <div className="min-w-0 flex-1">
-            {/*섹션 헤더*/}
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2 text-[14px] font-semibold text-[#F7941D]">
                 <span>{`완료 (${doneCount}개)`}</span>
@@ -513,17 +608,21 @@ export default function FolderPage() {
                     onClick={() => setOpenTaskId(t.id)}
                     className="flex w-full items-center justify-between px-4 py-6 text-left hover:bg-yellow-light-hover active:bg-yellow-light-active"
                   >
-                    {/*왼쪽*/}
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       <MenuYellowSvg className="h-[11.25px] w-3" />
+
                       <div className="min-w-0">
-                        <div className="truncate text-[15px] font-semibold leading-[150%] text-[#B0B0B0] line-through">
-                          {t.title}
-                        </div>
+                        <div className="truncate text-[15px] font-semibold leading-[150%] text-[#B0B0B0] line-through">{t.title}</div>
+
+                        {/* ✅ startAt 있을 때만 날짜 표시 */}
+                        {t._startAt ? (
+                          <div className="mt-1 font-pretendard text-[13px] font-normal leading-[150%] text-[#00857D]">
+                            {formatMMDD_DOW(t._startAt)}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
 
-                    {/*오른쪽*/}
                     <div className="flex items-center gap-2">
                       <span className="flex h-5.5 w-5.5 items-center justify-center rounded-xs bg-[#F7941D] text-[12px] font-semibold leading-[120%] text-white">
                         {t.priority}
@@ -541,9 +640,7 @@ export default function FolderPage() {
         </div>
       )}
 
-      {/*========================
-        할 일 정보 모달
-      ========================*/}
+      {/* 할 일 정보 모달 */}
       {openTask && (
         <div
           role="dialog"
@@ -553,11 +650,7 @@ export default function FolderPage() {
             if (e.target === e.currentTarget) closeModal();
           }}
         >
-          <div
-            ref={modalPanelRef}
-            className="w-full max-w-105 rounded-[14px] bg-white p-6 shadow-[0_0_10px_0_rgba(15,15,15,0.04)]"
-          >
-            {/*모달 헤더*/}
+          <div ref={modalPanelRef} className="w-full max-w-105 rounded-[14px] bg-white p-6 shadow-[0_0_10px_0_rgba(15,15,15,0.04)]">
             <div className="flex items-center justify-between">
               <div className="text-[16px] font-normal text-[#00B1A6]">할 일 정보</div>
               <button
@@ -570,12 +663,13 @@ export default function FolderPage() {
               </button>
             </div>
 
-            {/*시간 정보(타임블록 미구현이면 - )*/}
-            <div className="mt-5 text-center text-[28px] font-semibold leading-normal text-gray-700">{"-"}</div>
+            {/* 날짜 + 시간 범위 */}
+            <div className="mt-4 text-center text-[14px] font-semibold text-[#767676]">{modalDateText}</div>
+            <div className="mt-2 text-center font-pretendard text-[28px] font-semibold leading-normal text-[#2C2C2C]">
+              {modalTimeText}
+            </div>
 
-            {/*정보 행*/}
             <div className="mt-6 space-y-3">
-              {/*이름*/}
               <div className="flex items-center justify-between">
                 <div className="text-[14px] font-normal text-[#767676]">이름</div>
                 <button
@@ -588,7 +682,6 @@ export default function FolderPage() {
                 </button>
               </div>
 
-              {/*예상 소요 시간*/}
               <div className="flex items-center justify-between">
                 <div className="text-[14px] font-normal text-[#767676]">예상 소요 시간</div>
                 <button
@@ -601,7 +694,6 @@ export default function FolderPage() {
                 </button>
               </div>
 
-              {/*중요도*/}
               <div className="flex items-center justify-between">
                 <div className="text-[14px] font-normal text-[#767676]">중요도</div>
                 <button
@@ -615,7 +707,6 @@ export default function FolderPage() {
               </div>
             </div>
 
-            {/*하단 버튼 행*/}
             <div className="mt-6 flex gap-3">
               <button
                 type="button"
@@ -633,9 +724,7 @@ export default function FolderPage() {
                 onClick={toggleDoneFromModal}
                 className={[
                   "h-10.5 flex-1 rounded-md bg-[#F1F1F1] text-[14px] font-semibold text-[#767676]",
-                  openTask.isDone
-                    ? "hover:bg-gray-200 hover:text-gray-700 active:bg-gray-300"
-                    : "hover:bg-green-100 hover:text-green-700 active:bg-green-200",
+                  openTask.isDone ? "hover:bg-gray-200 hover:text-gray-700 active:bg-gray-300" : "hover:bg-green-100 hover:text-green-700 active:bg-green-200",
                 ].join(" ")}
               >
                 {openTask.isDone ? "완료 취소하기" : "할 일 완료하기"}
@@ -645,7 +734,6 @@ export default function FolderPage() {
         </div>
       )}
 
-      {/*폴더 삭제 확인 모달*/}
       <ConfirmModal
         open={deleteConfirmOpen}
         title="폴더를 삭제하시겠어요?"
