@@ -4,12 +4,17 @@ import { Outlet, useNavigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import ConfirmModal from "@/components/ConfirmModal";
 
+import { withdrawApi } from "@/apis/auth/withdrawApi";
+import { useAuthStore } from "@/constants/authStore";
+
 type RootOutletContext = {
   openDrawer: () => void;
 };
 
 export default function RootLayout() {
   const navigate = useNavigate();
+  const logout = useAuthStore((s) => s.logout);
+  const user = useAuthStore((s) => s.user);
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
@@ -35,10 +40,17 @@ export default function RootLayout() {
     setIsWithdrawModalOpen(false);
   };
 
-  const onConfirmWithdraw = () => {
-    setIsWithdrawModalOpen(false);
-    closeDrawer();
-    navigate("/");
+  const onConfirmWithdraw = async () => {
+    try {
+      await withdrawApi.withdraw();
+      logout(); 
+      setIsWithdrawModalOpen(false);
+      closeDrawer();
+      navigate("/login", { replace: true });
+    } catch (error) {
+      console.error("회원 탈퇴 실패:", error);
+      setIsWithdrawModalOpen(false);
+    }
   };
 
   const outletContext = useMemo<RootOutletContext>(() => ({ openDrawer }), []);
@@ -48,8 +60,8 @@ export default function RootLayout() {
       <Navbar
         open={isDrawerOpen}
         onClose={closeDrawer}
-        userName={undefined}
-        userEmail={undefined}
+        userName={user?.name}
+        userEmail={user?.email}
         onNavigate={onNavigate}
         onLogout={onLogout}
         onWithdraw={onOpenWithdraw}
@@ -61,6 +73,7 @@ export default function RootLayout() {
         description="계정이 삭제되며 복구되지 않습니다"
         cancelText="취소"
         confirmText="탈퇴"
+        variant="danger"
         onCancel={onCloseWithdraw}
         onConfirm={onConfirmWithdraw}
       />

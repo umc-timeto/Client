@@ -22,7 +22,7 @@ export function HeaderBase({ title, left, right }: HeaderBaseProps) {
         {title}
       </h1>
 
-      <div className="flex flex-none items-center justify-end" aria-label="header-right">
+      <div className="flex flex-none items-center justify-end " aria-label="header-right">
         {right}
       </div>
     </header>

@@ -21,8 +21,15 @@ export default function Navbar({
 }: NavbarProps) {
   if (!open) return null;
 
-  const displayName = userName && userName.trim().length > 0 ? userName : "사용자";
-  const displayEmail = userEmail && userEmail.trim().length > 0 ? userEmail : "email@example.com";
+  const displayName =
+    userName?.trim() && userName.trim().length > 0
+      ? userName
+      : "사용자";
+
+  const displayEmail =
+    userEmail?.trim() && userEmail.trim().length > 0
+      ? userEmail
+      : "email@example.com";
 
   return (
     <div className="fixed inset-0 z-500 flex flex-col bg-white">
@@ -43,13 +50,13 @@ export default function Navbar({
       <main className="flex-1 px-5 pb-0 flex flex-col">
         <section className="pt-8">
           <div className="title-20-semibold text-gray-700">{displayName}</div>
-          <div className="mt-2 body-14-regular text-gray-300">{displayEmail}</div>
+          <div className="mt-2 text-[14px] text-gray-300">{displayEmail}</div>
         </section>
 
         <nav className="mt-[40.5px] flex flex-col gap-5">
           <button
             type="button"
-            className="body-16-medium text-left text-gray-700"
+            className="text-[16px] text-left text-gray-700"
             onClick={() => onNavigate("/home")}
           >
             내 목표
@@ -59,7 +66,7 @@ export default function Navbar({
 
           <button
             type="button"
-            className="body-16-medium text-left text-gray-700"
+            className="text-[16px] text-left text-gray-700"
             onClick={() => onNavigate("/timeblock")}
           >
             타임 블록
@@ -69,7 +76,7 @@ export default function Navbar({
 
           <button
             type="button"
-            className="body-16-medium text-left text-gray-700"
+            className="text-[16px] text-left text-gray-700"
             onClick={() => onNavigate("/mylog")}
           >
             내 일지
@@ -79,15 +86,14 @@ export default function Navbar({
         <div className="mt-auto pb-12.5 flex flex-col gap-3.5">
           <button
             type="button"
-            className="body-14-medium text-left text-gray-700"
+            className="text-[14px] text-left text-gray-700"
             onClick={onLogout}
           >
             로그아웃
           </button>
-
           <button
             type="button"
-            className="body-14-medium text-left text-red-delete"
+            className="text-[14px] text-left text-red-delete"
             onClick={onWithdraw}
           >
             회원탈퇴
