@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+
 import type { Task } from "@/types/task";
 import { deleteTask, ensureMockSeed, getTasksByFolder, setTasksByFolder } from "@/api/taskApi";
 import { mockTasks } from "@/pages/TaskPage/mock";
@@ -17,6 +18,9 @@ import NextDarkSvg from "@/assets/next-dark.svg?react";
 
 import FProgressSvg from "@/assets/f_progress.svg?react";
 import FDoneSvg from "@/assets/f_done.svg?react";
+
+//✅ 폴더 API (서버)
+import { folderApi } from "@/apis/FolderPage/folder.api";
 
 //========================
 //STEP 1: 유틸
@@ -59,10 +63,7 @@ function PlusGreenIcon() {
 function PlusGreyRotateIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-      <path
-        d="M12 6.5H6.5M6.5 6.5H1M6.5 6.5V1M6.5 6.5V12"
-        stroke="#C2C2C2"
-      />
+      <path d="M12 6.5H6.5M6.5 6.5H1M6.5 6.5V1M6.5 6.5V12" stroke="#C2C2C2" />
     </svg>
   );
 }
@@ -76,20 +77,18 @@ export default function FolderPage() {
   const [searchParams] = useSearchParams();
 
   //========================
-  //STEP2 폴더 정보(임시)
+  //STEP2 폴더/목표 정보
   //========================
-  const folderId = searchParams.get("folderId") ?? "f1";
+  const folderId = searchParams.get("folderId") ?? "";
+  const folderIdNum = Number(folderId);
 
   const folderNameFromState = (location.state as { folderName?: string } | null)?.folderName;
   const folderNameFromQuery = searchParams.get("folderName") ?? undefined;
   const folderName = folderNameFromState ?? folderNameFromQuery ?? "폴더";
 
-  //========================
-  //STEP2 목표 정보(퍼블리싱용 임시)
-  //========================
   const goalNameFromState = (location.state as { goalName?: string } | null)?.goalName;
   const goalNameFromQuery = searchParams.get("goalName") ?? undefined;
-  const goalName = goalNameFromState ?? goalNameFromQuery ?? "SQLD"; //요구: 하드코딩이라도 보여주기
+  const goalName = goalNameFromState ?? goalNameFromQuery ?? "SQLD";
 
   const goalIdFromState = (location.state as { goalId?: string } | null)?.goalId;
   const goalIdFromQuery = searchParams.get("goalId") ?? undefined;
@@ -99,13 +98,25 @@ export default function FolderPage() {
   const goalColorFromQuery = searchParams.get("goalColor") ?? undefined;
   const goalColor = goalColorFromState ?? goalColorFromQuery ?? "#00B1A6";
 
+  //folderId 없으면 홈으로(방어)
+  useEffect(() => {
+    if (!folderId) {
+      navigate("/home", { replace: true });
+      return;
+    }
+    if (!Number.isFinite(folderIdNum)) {
+      navigate("/home", { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [folderId]);
+
   //========================
   //STEP2 폴더 액션 메뉴/삭제 모달
   //========================
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
-  //AppHeaderAuto에서 쏘는 "folder:menu" 수신 (HomePage랑 동일 패턴)
+  //AppHeaderAuto에서 쏘는 "folder:menu" 수신
   useEffect(() => {
     const onOpen = () => setMenuOpen(true);
     window.addEventListener("folder:menu", onOpen as any);
@@ -140,7 +151,7 @@ export default function FolderPage() {
   }, [openTaskId, progressTasks, doneTasks]);
 
   //========================
-  //STEP3 초기 로드/리로드
+  //STEP3 초기 로드/리로드 (Task는 아직 로컬)
   //========================
   const load = async () => {
     ensureMockSeed(mockTasks);
@@ -154,6 +165,7 @@ export default function FolderPage() {
   };
 
   useEffect(() => {
+    if (!folderId) return;
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [folderId, location.key]);
@@ -181,7 +193,6 @@ export default function FolderPage() {
   //========================
   useEffect(() => {
     const anyOpen = Boolean(openTaskId) || deleteConfirmOpen || menuOpen;
-
     document.body.classList.toggle("no-scroll", anyOpen);
 
     return () => {
@@ -190,7 +201,7 @@ export default function FolderPage() {
   }, [openTaskId, deleteConfirmOpen, menuOpen]);
 
   //========================
-  //STEP3 저장(로컬스토리지 반영)
+  //STEP3 저장(로컬스토리지 반영) - Task는 아직 로컬
   //========================
   const persist = async (nextProgress: Task[], nextDone: Task[]) => {
     await setTasksByFolder(folderId, [...nextProgress, ...nextDone]);
@@ -316,29 +327,44 @@ export default function FolderPage() {
   const doneCount = useMemo(() => doneTasks.length, [doneTasks]);
 
   //========================
-  //STEP3 폴더 수정/삭제
+  //STEP3 폴더 수정/삭제 (서버 API 연동)
   //========================
   const goFolderEdit = () => {
+    //FolderSelectPage edit 프리필은 goalId가 필수라서 같이 넘김
     const q = new URLSearchParams();
-    q.set("mode", "edit"); 
-    q.set("step", "2");        
+    q.set("mode", "edit");
+    q.set("step", "2");
     q.set("canSave", "0");
 
     if (goalId) q.set("goalId", goalId);
+    if (goalName) q.set("goalName", goalName);
+    if (goalColor) q.set("goalColor", goalColor);
+
     q.set("folderId", folderId);
     q.set("folderName", String(folderName));
 
     setMenuOpen(false);
     navigate(`/folder/select?${q.toString()}`, {
-      state: { goalId, folderId, folderName },
+      state: { goalId, goalName, goalColor, folderId, folderName },
     });
   };
 
-
   const deleteFolder = async () => {
-    //API 붙기 전: 화면만 빠져나감
     setDeleteConfirmOpen(false);
-    navigate(-1);
+
+    if (!Number.isFinite(folderIdNum)) {
+      navigate("/home", { replace: true });
+      return;
+    }
+
+    try {
+      await folderApi.deleteFolder(folderIdNum);
+      //삭제 후 홈으로(홈은 location.key/focus로 갱신도 하고 있어서 안전)
+      navigate("/home", { replace: true });
+    } catch (e) {
+      console.error(e);
+      //실패해도 일단 화면은 유지(원하면 토스트/알림 추가)
+    }
   };
 
   //========================
@@ -352,7 +378,7 @@ export default function FolderPage() {
         <span className="text-[12px] font-semibold text-[#3A3A3A]">{goalName}</span>
       </div>
 
-      {/*폴더 메뉴(ActionMenu) - 점3개 클릭은 AppHeaderAuto가 이벤트만 쏘고, 여기가 띄움*/}
+      {/*폴더 메뉴(ActionMenu)*/}
       <ActionMenu
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
@@ -363,7 +389,6 @@ export default function FolderPage() {
         }}
         EditIcon={<EditSvg className="h-4 w-4" />}
         DeleteIcon={<DeleteSvg className="h-4 w-4" />}
-        //헤더 기준 우상단에 뜨는 느낌으로(대충) 맞춤. 필요하면 값만 바꾸면 됨.
         className="right-5 top-25"
       />
 
@@ -385,7 +410,6 @@ export default function FolderPage() {
               <span>{`진행 (${progressCount}개)`}</span>
             </div>
 
-            {/*오른쪽 회색 + (요구 svg)*/}
             <button
               type="button"
               onClick={goTaskAdd}
@@ -409,9 +433,7 @@ export default function FolderPage() {
               ].join(" ")}
             >
               <PlusGreenIcon />
-              <span className="text-[13px] font-semibold leading-[150%] text-[#00857D]">
-                할 일을 추가하세요
-              </span>
+              <span className="text-[13px] font-semibold leading-[150%] text-[#00857D]">할 일을 추가하세요</span>
             </button>
           ) : (
             <div className="overflow-hidden rounded-lg border border-[#00B1A6] bg-white">
@@ -474,8 +496,6 @@ export default function FolderPage() {
               <div className="flex items-center gap-2 text-[14px] font-semibold text-[#F7941D]">
                 <span>{`완료 (${doneCount}개)`}</span>
               </div>
-
-              {/*완료 섹션 오른쪽은 + 없음(스크린샷 기준) */}
               <div className="h-7 w-7" />
             </div>
 
@@ -551,9 +571,7 @@ export default function FolderPage() {
             </div>
 
             {/*시간 정보(타임블록 미구현이면 - )*/}
-            <div className="mt-5 text-center text-[28px] font-semibold leading-normal text-gray-700">
-              {"-"}
-            </div>
+            <div className="mt-5 text-center text-[28px] font-semibold leading-normal text-gray-700">{"-"}</div>
 
             {/*정보 행*/}
             <div className="mt-6 space-y-3">
