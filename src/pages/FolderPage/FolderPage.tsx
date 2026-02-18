@@ -22,6 +22,20 @@ import { folderApi } from "@/apis/FolderPage/folder.api";
 import { taskApi } from "@/apis/TaskPage/task.api";
 import type { ApiPriority, ApiTodoState, TodoSummaryDto } from "@/apis/TaskPage/task.types";
 
+//✅ dnd-kit(모바일 터치 드래그 지원)
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragStartEvent,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
 //========================
 //유틸
 //========================
@@ -32,17 +46,6 @@ function formatDuration(minutes: number) {
   if (h > 0 && mm > 0) return `${h}H ${mm}M`;
   if (h > 0) return `${h}H`;
   return `${mm}M`;
-}
-
-function reorderByIds(list: Task[], fromId: string, toId: string) {
-  const fromIndex = list.findIndex((t) => t.id === fromId);
-  const toIndex = list.findIndex((t) => t.id === toId);
-  if (fromIndex < 0 || toIndex < 0) return list;
-
-  const next = [...list];
-  const [picked] = next.splice(fromIndex, 1);
-  next.splice(toIndex, 0, picked);
-  return next;
 }
 
 function PlusGreenIcon() {
@@ -126,6 +129,100 @@ function toUiTaskFromSummary(dto: TodoSummaryDto, state: ApiTodoState): UiTaskWi
   };
 }
 
+//========================
+//STEP 1: Sortable Row(핸들만 드래그 가능)
+//========================
+function SortableTaskRow(props: {
+  section: "progress" | "done";
+  task: UiTaskWithOrder;
+  onClick: () => void;
+}) {
+  const { section, task, onClick } = props;
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: task.id,
+    data: { section },
+  });
+
+  //STEP2 드래그 중 "슉슉" 이동 효과
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  } as React.CSSProperties;
+
+  const isDone = section === "done";
+  const rowHover = isDone ? "hover:bg-yellow-light-hover active:bg-yellow-light-active" : "hover:bg-green-light-hover active:bg-green-light-active";
+  const titleClass = isDone
+    ? "truncate text-[15px] font-semibold leading-[150%] text-[#B0B0B0] line-through"
+    : "truncate text-[15px] font-semibold leading-[150%] text-[#2C2C2C]";
+
+  const badgeBg = isDone ? "#F7941D" : "#00B1A6";
+  const badgeBorder = isDone ? "#F7941D" : "#00B1A6";
+  const badgeText = isDone ? "#F7941D" : "#00B1A6";
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={[
+        "flex w-full items-center justify-between px-4 py-6 text-left",
+        rowHover,
+        isDragging ? "opacity-70" : "",
+      ].join(" ")}
+      //STEP3 Row 클릭 시 모달 오픈
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") onClick();
+      }}
+    >
+      {/*할 일 Row:왼쪽(핸들 + 텍스트)*/}
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        {/*드래그 핸들:모바일 터치 드래그 시작 지점*/}
+        <div
+          className="touch-none select-none cursor-grab active:cursor-grabbing"
+          {...attributes}
+          {...listeners}
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
+        >
+          {isDone ? <MenuYellowSvg className="h-[11.25px] w-3" /> : <MenuGreenSvg className="h-[11.25px] w-3" />}
+        </div>
+
+        <div className="min-w-0">
+          <div className={titleClass}>{task.title}</div>
+
+          {/*startAt 있을 때만 날짜 표시*/}
+          {task._startAt ? (
+            <div className="mt-1 font-pretendard text-[13px] font-normal leading-[150%] text-[#00857D]">
+              {formatMMDD_DOW(task._startAt)}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {/*할 일 Row:오른쪽(중요도 + 소요시간)*/}
+      <div className="flex items-center gap-2">
+        <span
+          className="flex h-5.5 w-5.5 items-center justify-center rounded-xs text-[12px] font-semibold leading-[120%] text-white"
+          style={{ background: badgeBg }}
+        >
+          {task.priority}
+        </span>
+
+        <span
+          className="flex h-5.5 w-13 items-center justify-center rounded-[3px] border text-[12px] font-semibold"
+          style={{ borderColor: badgeBorder, color: badgeText }}
+        >
+          {formatDuration(task.durationMinutes)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function FolderPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -183,10 +280,22 @@ export default function FolderPage() {
   const [doneTasks, setDoneTasks] = useState<UiTaskWithOrder[]>([]);
 
   //========================
-  //드래그 상태
+  //드래그 상태(dnd-kit)
   //========================
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [draggingSection, setDraggingSection] = useState<"progress" | "done" | null>(null);
+  const [, setDraggingId] = useState<string | null>(null);
+  const [, setDraggingSection] = useState<"progress" | "done" | null>(null);
+
+  //========================
+  //센서(PC + 모바일 터치)
+  //========================
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 220, tolerance: 8 },
+    }),
+  );
 
   //========================
   //할 일 정보 모달
@@ -388,47 +497,65 @@ export default function FolderPage() {
   };
 
   //========================
-  //드래그
+  //드래그(dnd-kit)
   //========================
-  const onDragStart = (taskId: string, section: "progress" | "done") => {
-    setDraggingId(taskId);
-    setDraggingSection(section);
-  };
+  const onDragStart = useCallback((e: DragStartEvent) => {
+    const section = String((e.active.data.current as any)?.section ?? "");
+    setDraggingId(String(e.active.id));
+    setDraggingSection(section === "done" ? "done" : "progress");
+      console.log("DRAG START", e.active.id, e.active.data.current); //디버깅용
+  }, []);
 
-  const onDragEnd = () => {
-    setDraggingId(null);
-    setDraggingSection(null);
-  };
+  const onDragEnd = useCallback(
+    async (e: DragEndEvent) => {
+      const activeId = String(e.active.id);
+      const overId = e.over ? String(e.over.id) : null;
 
-  const onDropOnItem = async (targetId: string, section: "progress" | "done") => {
-    if (!draggingId || !draggingSection) return;
-    if (draggingSection !== section) return;
-    if (draggingId === targetId) return;
+      const activeSectionRaw = String((e.active.data.current as any)?.section ?? "");
+      const overSectionRaw = String((e.over?.data.current as any)?.section ?? "");
 
-    const list = section === "progress" ? progressTasks : doneTasks;
+      const activeSection = activeSectionRaw === "done" ? "done" : "progress";
+      const overSection = overSectionRaw === "done" ? "done" : "progress";
 
-    const from = list.find((t) => t.id === draggingId);
-    const to = list.find((t) => t.id === targetId);
-    if (!from || !to) return;
+      setDraggingId(null);
+      setDraggingSection(null);
 
-    const next = reorderByIds(list, draggingId, targetId);
-    if (section === "progress") setProgressTasks(next as UiTaskWithOrder[]);
-    else setDoneTasks(next as UiTaskWithOrder[]);
+      //STEP1 드롭 대상이 없으면 종료
+      if (!overId) return;
 
-    const todoId = Number(draggingId);
-    if (!Number.isFinite(todoId)) return;
+      //STEP2 같은 섹션 내에서만 reorder 허용
+      if (activeSection !== overSection) return;
+      if (activeId === overId) return;
 
-    const targetIndex = next.findIndex((t) => t.id === targetId);
-    const targetOrder = typeof (to as UiTaskWithOrder)._sortOrder === "number" ? (to as UiTaskWithOrder)._sortOrder! : targetIndex + 1;
+      const cur = activeSection === "progress" ? progressTasks : doneTasks;
+      const fromIndex = cur.findIndex((t) => t.id === activeId);
+      const toIndex = cur.findIndex((t) => t.id === overId);
+      if (fromIndex < 0 || toIndex < 0) return;
 
-    try {
-      await taskApi.updateTodoOrder(todoId, { targetOrder });
-      await load();
-    } catch (e) {
-      console.error(e);
-      await load();
-    }
-  };
+      const next = arrayMove(cur, fromIndex, toIndex);
+      if (activeSection === "progress") setProgressTasks(next);
+      else setDoneTasks(next);
+
+      const todoId = Number(activeId);
+      if (!Number.isFinite(todoId)) {
+        await load();
+        return;
+      }
+
+      const overTask = cur.find((t) => t.id === overId) as UiTaskWithOrder | undefined;
+      const fallbackOrder = toIndex + 1;
+      const targetOrder = typeof overTask?._sortOrder === "number" ? overTask._sortOrder : fallbackOrder;
+
+      try {
+        await taskApi.updateTodoOrder(todoId, { targetOrder });
+        await load();
+      } catch (err) {
+        console.error(err);
+        await load();
+      }
+    },
+    [progressTasks, doneTasks, load],
+  );
 
   const progressCount = useMemo(() => progressTasks.length, [progressTasks]);
   const doneCount = useMemo(() => doneTasks.length, [doneTasks]);
@@ -474,276 +601,244 @@ export default function FolderPage() {
   //========================
   //렌더
   //========================
+  const progressIds = useMemo(() => progressTasks.map((t) => t.id), [progressTasks]);
+  const doneIds = useMemo(() => doneTasks.map((t) => t.id), [doneTasks]);
+
   return (
-    <div className="bg-white px-5 pt-6 pb-24">
-      <div className="mb-6 flex items-center justify-center gap-2">
-        <FlagSvg className="h-4 w-4" style={{ color: goalColor }} />
-        <span className="text-[12px] font-semibold text-[#3A3A3A]">{goalName}</span>
-      </div>
-
-      <ActionMenu
-        open={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        onEdit={goFolderEdit}
-        onDelete={() => {
-          setMenuOpen(false);
-          setDeleteConfirmOpen(true);
-        }}
-        EditIcon={<EditSvg className="h-4 w-4" />}
-        DeleteIcon={<DeleteSvg className="h-4 w-4" />}
-        className="right-5 top-25"
-      />
-
-      {/* 진행 섹션 */}
-      <div className="flex gap-3">
-        <div className="flex w-4 flex-col items-center">
-          <FProgressSvg className="h-6 w-6" />
-          <div className="mt-2 flex-1 w-px border-l border-dotted border-[#B0E7E3]" />
+    //========================
+    //STEP 1: 드래그 컨텍스트(모바일 포함)
+    //========================
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+    >
+      <div className="bg-white px-5 pt-6 pb-24">
+        <div className="mb-6 flex items-center justify-center gap-2">
+          <FlagSvg className="h-4 w-4" style={{ color: goalColor }} />
+          <span className="text-[12px] font-semibold text-[#3A3A3A]">{goalName}</span>
         </div>
 
-        <div className="min-w-0 flex-1">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-[14px] font-semibold text-[#00857D]">
-              <span>{`진행 (${progressCount}개)`}</span>
-            </div>
+        <ActionMenu
+          open={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          onEdit={goFolderEdit}
+          onDelete={() => {
+            setMenuOpen(false);
+            setDeleteConfirmOpen(true);
+          }}
+          EditIcon={<EditSvg className="h-4 w-4" />}
+          DeleteIcon={<DeleteSvg className="h-4 w-4" />}
+          className="right-5 top-25"
+        />
 
-            <button
-              type="button"
-              onClick={goTaskAdd}
-              aria-label="add task"
-              className="grid h-7 w-7 place-items-center rounded-md hover:bg-black/5 active:bg-black/10"
-            >
-              <span>
-                <PlusGreyRotateIcon />
-              </span>
-            </button>
-          </div>
-
-          {progressCount === 0 ? (
-            <button
-              type="button"
-              onClick={goTaskAdd}
-              className={[
-                "flex w-full items-center justify-start gap-3 rounded-lg bg-[#E6F7F6] py-7 pl-5",
-                "hover:bg-[#D9F2F0] active:bg-[#CDEDEA]",
-              ].join(" ")}
-            >
-              <PlusGreenIcon />
-              <span className="text-[13px] font-semibold leading-[150%] text-[#00857D]">할 일을 추가하세요</span>
-            </button>
-          ) : (
-            <div className="overflow-hidden rounded-lg border border-[#00B1A6] bg-white">
-              <div className="divide-y divide-[#B0E7E3]">
-                {progressTasks.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    draggable
-                    onDragStart={() => onDragStart(t.id, "progress")}
-                    onDragEnd={onDragEnd}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => onDropOnItem(t.id, "progress")}
-                    onClick={() => setOpenTaskId(t.id)}
-                    className="flex w-full items-center justify-between px-4 py-6 text-left hover:bg-green-light-hover active:bg-green-light-active"
-                  >
-                    <div className="flex min-w-0 flex-1 items-center gap-3">
-                      <MenuGreenSvg className="h-[11.25px] w-3" />
-
-                      <div className="min-w-0">
-                        <div className="truncate text-[15px] font-semibold leading-[150%] text-[#2C2C2C]">{t.title}</div>
-
-                        {/* ✅ startAt 있을 때만 날짜 표시 */}
-                        {t._startAt ? (
-                          <div className="mt-1 font-pretendard text-[13px] font-normal leading-[150%] text-[#00857D]">
-                            {formatMMDD_DOW(t._startAt)}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-5.5 w-5.5 items-center justify-center rounded-xs bg-[#00B1A6] text-[12px] font-semibold leading-[120%] text-white">
-                        {t.priority}
-                      </span>
-
-                      <span className="flex h-5.5 w-13 items-center justify-center rounded-[3px] border border-[#00B1A6] text-[12px] font-semibold text-[#00B1A6]">
-                        {formatDuration(t.durationMinutes)}
-                      </span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* 완료 섹션 */}
-      {doneCount > 0 && (
-        <div className="mt-8 flex gap-3">
+        {/* 진행 섹션 */}
+        <div className="flex gap-3">
           <div className="flex w-4 flex-col items-center">
-            <FDoneSvg className="h-4 w-4" />
-            <div className="mt-2 flex-1 w-px border-l border-dotted border-[#FFE7B0]" />
+            <FProgressSvg className="h-6 w-6" />
+            <div className="mt-2 flex-1 w-px border-l border-dotted border-[#B0E7E3]" />
           </div>
 
           <div className="min-w-0 flex-1">
             <div className="mb-3 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-[14px] font-semibold text-[#F7941D]">
-                <span>{`완료 (${doneCount}개)`}</span>
+              <div className="flex items-center gap-2 text-[14px] font-semibold text-[#00857D]">
+                <span>{`진행 (${progressCount}개)`}</span>
               </div>
-              <div className="h-7 w-7" />
+
+              <button
+                type="button"
+                onClick={goTaskAdd}
+                aria-label="add task"
+                className="grid h-7 w-7 place-items-center rounded-md hover:bg-black/5 active:bg-black/10"
+              >
+                <span>
+                  <PlusGreyRotateIcon />
+                </span>
+              </button>
             </div>
 
-            <div className="overflow-hidden rounded-lg border border-[#F7941D] bg-white">
-              <div className="divide-y divide-[#FFE7B0]">
-                {doneTasks.map((t) => (
+            {progressCount === 0 ? (
+              <button
+                type="button"
+                onClick={goTaskAdd}
+                className={[
+                  "flex w-full items-center justify-start gap-3 rounded-lg bg-[#E6F7F6] py-7 pl-5",
+                  "hover:bg-[#D9F2F0] active:bg-[#CDEDEA]",
+                ].join(" ")}
+              >
+                <PlusGreenIcon />
+                <span className="text-[13px] font-semibold leading-[150%] text-[#00857D]">할 일을 추가하세요</span>
+              </button>
+            ) : (
+              //========================
+              //STEP 2: 진행 Sortable
+              //========================
+              <SortableContext items={progressIds} strategy={verticalListSortingStrategy}>
+                <div className="overflow-hidden rounded-lg border border-[#00B1A6] bg-white">
+                  <div className="divide-y divide-[#B0E7E3]">
+                    {progressTasks.map((t) => (
+                      <SortableTaskRow
+                        key={t.id}
+                        section="progress"
+                        task={t}
+                        onClick={() => setOpenTaskId(t.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </SortableContext>
+            )}
+          </div>
+        </div>
+
+        {/* 완료 섹션 */}
+        {doneCount > 0 && (
+          <div className="mt-8 flex gap-3">
+            <div className="flex w-4 flex-col items-center">
+              <FDoneSvg className="h-4 w-4" />
+              <div className="mt-2 flex-1 w-px border-l border-dotted border-[#FFE7B0]" />
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-[14px] font-semibold text-[#F7941D]">
+                  <span>{`완료 (${doneCount}개)`}</span>
+                </div>
+                <div className="h-7 w-7" />
+              </div>
+
+              {/*========================
+                STEP 3: 완료 Sortable
+              ========================*/}
+              <SortableContext items={doneIds} strategy={verticalListSortingStrategy}>
+                <div className="overflow-hidden rounded-lg border border-[#F7941D] bg-white">
+                  <div className="divide-y divide-[#FFE7B0]">
+                    {doneTasks.map((t) => (
+                      <SortableTaskRow
+                        key={t.id}
+                        section="done"
+                        task={t}
+                        onClick={() => setOpenTaskId(t.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </SortableContext>
+            </div>
+          </div>
+        )}
+
+        {/* 할 일 정보 모달 */}
+        {openTask && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/20 px-4 pb-6"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) closeModal();
+            }}
+          >
+            <div
+              ref={modalPanelRef}
+              className="w-full max-w-105 rounded-[14px] bg-white p-6 shadow-[0_0_10px_0_rgba(15,15,15,0.04)]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="text-[16px] font-normal text-[#00B1A6]">할 일 정보</div>
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="grid h-6 w-6 place-items-center rounded-md text-[#767676] hover:bg-black/5 active:bg-black/10"
+                  aria-label="close"
+                >
+                  <span className="text-[18px] leading-none">×</span>
+                </button>
+              </div>
+
+              {/* 날짜 + 시간 범위 */}
+              <div className="mt-4 text-center text-[14px] font-semibold text-[#767676]">{modalDateText}</div>
+              <div className="mt-2 text-center font-pretendard text-[28px] font-semibold leading-normal text-[#2C2C2C]">
+                {modalTimeText}
+              </div>
+
+              <div className="mt-6 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-[14px] font-normal text-[#767676]">이름</div>
                   <button
-                    key={t.id}
                     type="button"
-                    draggable
-                    onDragStart={() => onDragStart(t.id, "done")}
-                    onDragEnd={onDragEnd}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => onDropOnItem(t.id, "done")}
-                    onClick={() => setOpenTaskId(t.id)}
-                    className="flex w-full items-center justify-between px-4 py-6 text-left hover:bg-yellow-light-hover active:bg-yellow-light-active"
+                    onClick={goEditStep1}
+                    className="group flex items-center gap-2 rounded-md px-2 py-1 text-right text-[14px] font-semibold text-gray-700 hover:bg-black/5 active:bg-black/10"
                   >
-                    <div className="flex min-w-0 flex-1 items-center gap-3">
-                      <MenuYellowSvg className="h-[11.25px] w-3" />
-
-                      <div className="min-w-0">
-                        <div className="truncate text-[15px] font-semibold leading-[150%] text-[#B0B0B0] line-through">{t.title}</div>
-
-                        {/* ✅ startAt 있을 때만 날짜 표시 */}
-                        {t._startAt ? (
-                          <div className="mt-1 font-pretendard text-[13px] font-normal leading-[150%] text-[#00857D]">
-                            {formatMMDD_DOW(t._startAt)}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-5.5 w-5.5 items-center justify-center rounded-xs bg-[#F7941D] text-[12px] font-semibold leading-[120%] text-white">
-                        {t.priority}
-                      </span>
-
-                      <span className="flex h-5.5 w-13 items-center justify-center rounded-[3px] border border-[#F7941D] text-[12px] font-semibold text-[#F7941D]">
-                        {formatDuration(t.durationMinutes)}
-                      </span>
-                    </div>
+                    <span className="max-w-55 truncate">{openTask.title}</span>
+                    <NextDarkSvg className="h-3.5 w-3.5" />
                   </button>
-                ))}
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="text-[14px] font-normal text-[#767676]">예상 소요 시간</div>
+                  <button
+                    type="button"
+                    onClick={goEditStep1}
+                    className="group flex items-center gap-2 rounded-md px-2 py-1 text-right text-[14px] font-semibold text-gray-700 hover:bg-black/5 active:bg-black/10"
+                  >
+                    <span>{formatDuration(openTask.durationMinutes)}</span>
+                    <NextDarkSvg className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="text-[14px] font-normal text-[#767676]">중요도</div>
+                  <button
+                    type="button"
+                    onClick={goEditStep2}
+                    className="group flex items-center gap-2 rounded-md px-2 py-1 text-right text-[14px] font-semibold text-gray-700 hover:bg-black/5 active:bg-black/10"
+                  >
+                    <span>{openTask.priority}</span>
+                    <NextDarkSvg className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={removeFromModal}
+                  className={[
+                    "flex h-10.5 w-22 items-center justify-center rounded-md border border-[#C2C2C2] bg-white text-[14px] font-semibold text-[#3A3A3A]",
+                    "hover:bg-red-100 hover:text-red-600 active:bg-red-200",
+                  ].join(" ")}
+                >
+                  삭제
+                </button>
+
+                <button
+                  type="button"
+                  onClick={toggleDoneFromModal}
+                  className={[
+                    "h-10.5 flex-1 rounded-md bg-[#F1F1F1] text-[14px] font-semibold text-[#767676]",
+                    openTask.isDone
+                      ? "hover:bg-gray-200 hover:text-gray-700 active:bg-gray-300"
+                      : "hover:bg-green-100 hover:text-green-700 active:bg-green-200",
+                  ].join(" ")}
+                >
+                  {openTask.isDone ? "완료 취소하기" : "할 일 완료하기"}
+                </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* 할 일 정보 모달 */}
-      {openTask && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/20 px-4 pb-6"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) closeModal();
-          }}
-        >
-          <div ref={modalPanelRef} className="w-full max-w-105 rounded-[14px] bg-white p-6 shadow-[0_0_10px_0_rgba(15,15,15,0.04)]">
-            <div className="flex items-center justify-between">
-              <div className="text-[16px] font-normal text-[#00B1A6]">할 일 정보</div>
-              <button
-                type="button"
-                onClick={closeModal}
-                className="grid h-6 w-6 place-items-center rounded-md text-[#767676] hover:bg-black/5 active:bg-black/10"
-                aria-label="close"
-              >
-                <span className="text-[18px] leading-none">×</span>
-              </button>
-            </div>
-
-            {/* 날짜 + 시간 범위 */}
-            <div className="mt-4 text-center text-[14px] font-semibold text-[#767676]">{modalDateText}</div>
-            <div className="mt-2 text-center font-pretendard text-[28px] font-semibold leading-normal text-[#2C2C2C]">
-              {modalTimeText}
-            </div>
-
-            <div className="mt-6 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="text-[14px] font-normal text-[#767676]">이름</div>
-                <button
-                  type="button"
-                  onClick={goEditStep1}
-                  className="group flex items-center gap-2 rounded-md px-2 py-1 text-right text-[14px] font-semibold text-gray-700 hover:bg-black/5 active:bg-black/10"
-                >
-                  <span className="max-w-55 truncate">{openTask.title}</span>
-                  <NextDarkSvg className="h-3.5 w-3.5" />
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="text-[14px] font-normal text-[#767676]">예상 소요 시간</div>
-                <button
-                  type="button"
-                  onClick={goEditStep1}
-                  className="group flex items-center gap-2 rounded-md px-2 py-1 text-right text-[14px] font-semibold text-gray-700 hover:bg-black/5 active:bg-black/10"
-                >
-                  <span>{formatDuration(openTask.durationMinutes)}</span>
-                  <NextDarkSvg className="h-3.5 w-3.5" />
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="text-[14px] font-normal text-[#767676]">중요도</div>
-                <button
-                  type="button"
-                  onClick={goEditStep2}
-                  className="group flex items-center gap-2 rounded-md px-2 py-1 text-right text-[14px] font-semibold text-gray-700 hover:bg-black/5 active:bg-black/10"
-                >
-                  <span>{openTask.priority}</span>
-                  <NextDarkSvg className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-6 flex gap-3">
-              <button
-                type="button"
-                onClick={removeFromModal}
-                className={[
-                  "flex h-10.5 w-22 items-center justify-center rounded-md border border-[#C2C2C2] bg-white text-[14px] font-semibold text-[#3A3A3A]",
-                  "hover:bg-red-100 hover:text-red-600 active:bg-red-200",
-                ].join(" ")}
-              >
-                삭제
-              </button>
-
-              <button
-                type="button"
-                onClick={toggleDoneFromModal}
-                className={[
-                  "h-10.5 flex-1 rounded-md bg-[#F1F1F1] text-[14px] font-semibold text-[#767676]",
-                  openTask.isDone ? "hover:bg-gray-200 hover:text-gray-700 active:bg-gray-300" : "hover:bg-green-100 hover:text-green-700 active:bg-green-200",
-                ].join(" ")}
-              >
-                {openTask.isDone ? "완료 취소하기" : "할 일 완료하기"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <ConfirmModal
-        open={deleteConfirmOpen}
-        title="폴더를 삭제하시겠어요?"
-        description="폴더 내 할 일도 삭제돼요"
-        cancelText="취소"
-        confirmText="삭제"
-        variant="danger"
-        onCancel={() => setDeleteConfirmOpen(false)}
-        onConfirm={deleteFolder}
-      />
-    </div>
+        <ConfirmModal
+          open={deleteConfirmOpen}
+          title="폴더를 삭제하시겠어요?"
+          description="폴더 내 할 일도 삭제돼요"
+          cancelText="취소"
+          confirmText="삭제"
+          variant="danger"
+          onCancel={() => setDeleteConfirmOpen(false)}
+          onConfirm={deleteFolder}
+        />
+      </div>
+    </DndContext>
   );
 }
