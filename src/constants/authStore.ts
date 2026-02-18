@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { logoutApi } from "@/apis/auth/logout";
 
 export type AuthUser = {
   id: string;
@@ -57,10 +58,15 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isAuthenticated: true, user, accessToken });
   },
 
-  logout: () => {
-    sessionStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(LOCAL_TOKEN_KEY);
+  logout: async () => {
+  try {
+    await logoutApi.logout();
+  } catch {
+  }
 
-    set({ isAuthenticated: false, user: null, accessToken: null });
-  },
+  sessionStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(LOCAL_TOKEN_KEY);
+
+  set({ isAuthenticated: false, user: null, accessToken: null });
+},
 }));
