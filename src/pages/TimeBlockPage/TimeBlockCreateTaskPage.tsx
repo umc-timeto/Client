@@ -37,7 +37,6 @@ const durationToMinutes = (duration?: string): number | undefined => {
   const raw = String(duration ?? "").trim();
   if (!raw) return undefined;
 
-  // ISO-8601-ish: PT#H#M
   const iso = raw.match(/^PT(?:(\d+)H)?(?:(\d+)M)?$/i);
   if (iso) {
     const h = iso[1] ? Number(iso[1]) : 0;
@@ -46,7 +45,6 @@ const durationToMinutes = (duration?: string): number | undefined => {
     return Number.isFinite(total) ? total : undefined;
   }
 
-  // Human: "1H 30M", "1h30m", "90M", "1H"
   const hMatch = raw.match(/(\d+)\s*H/i);
   const mMatch = raw.match(/(\d+)\s*M/i);
   if (hMatch || mMatch) {
@@ -56,7 +54,6 @@ const durationToMinutes = (duration?: string): number | undefined => {
     return Number.isFinite(total) ? total : undefined;
   }
 
-  // Fallback: plain number means minutes
   const n = Number(raw);
   return Number.isFinite(n) ? n : undefined;
 };
@@ -71,12 +68,11 @@ const formatStartAt = (dateYmd: string, base: Date) => {
   const ymd = isYmd(dateYmd)
     ? dateYmd
     : `${base.getFullYear()}-${pad2(base.getMonth() + 1)}-${pad2(base.getDate())}`;
-  return `${ymd}T${pad2(base.getHours())}:${pad2(base.getMinutes())}`;
+  return `${ymd}T${pad2(base.getHours())}:${pad2(base.getMinutes())}:00`;
 };
 
 const addMinutes = (startAt: string, minutes: number) => {
-  // startAt: YYYY-MM-DDTHH:mm
-  const m = startAt.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  const m = startAt.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (!m) return startAt;
 
   const y = Number(m[1]);
@@ -84,13 +80,14 @@ const addMinutes = (startAt: string, minutes: number) => {
   const d = Number(m[3]);
   const hh = Number(m[4]);
   const mm = Number(m[5]);
+  const ss = m[6] ? Number(m[6]) : 0;
 
-  const dt = new Date(y, mo, d, hh, mm);
+  const dt = new Date(y, mo, d, hh, mm, ss);
   if (Number.isNaN(dt.getTime())) return startAt;
 
   dt.setMinutes(dt.getMinutes() + minutes);
 
-  return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}T${pad2(dt.getHours())}:${pad2(dt.getMinutes())}`;
+  return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}T${pad2(dt.getHours())}:${pad2(dt.getMinutes())}:00`;
 };
 
 export default function TimeBlockCreateTaskPage() {
@@ -107,11 +104,13 @@ export default function TimeBlockCreateTaskPage() {
   const [pendingStartAt, setPendingStartAt] = useState<string | null>(null);
 
   const dateYmd = (() => {
-    const d = searchParams.get("date") ?? searchParams.get("w") ?? "";
+    const d = searchParams.get("date") ?? searchParams.get("w") ?? sessionStorage.getItem("timetto_timeblock_date") ?? "";
     if (isYmd(d)) return d;
     const now = new Date();
     return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
   })();
+
+  const dateQuery = `?date=${encodeURIComponent(dateYmd)}`;
 
   const folderId = useMemo(() => {
     if (!pickedFolder) return null;
@@ -153,7 +152,12 @@ export default function TimeBlockCreateTaskPage() {
         })
       );
 
-      return merged;
+      const visible = merged.filter((t) => {
+        const s = (t as UnblockedTodoItem).startAt;
+        return s === null || s === undefined || String(s).trim() === "";
+      });
+
+      return visible;
     },
     enabled: folderId !== null,
     staleTime: 30_000,
@@ -169,7 +173,6 @@ export default function TimeBlockCreateTaskPage() {
       const minutes = durationToMinutes(t.duration);
 
       return {
-        // store(pickedTask.id) is typed as string
         id: String(t.todoId),
         todoId: t.todoId,
         folderId: folderId ?? 0,
@@ -191,7 +194,9 @@ export default function TimeBlockCreateTaskPage() {
       return "ok";
     } catch (e) {
       const status = getHttpStatus(e);
-      if (status === 400 || status === 409) return "conflict";
+      // if (status === 409) return "conflict";
+      // 만약 400 충돌로 간주 안하려면 위 코드 활성화
+      if (status === 409 || status === 400 ) return "conflict";
       return "error";
     } finally {
       setSaving(false);
@@ -199,14 +204,15 @@ export default function TimeBlockCreateTaskPage() {
   };
 
   const saveWithAutoShift = async (todoId: number, startAt: string, stepMinutes: number) => {
-    const maxTries = 48; 
+    const step = Number.isFinite(stepMinutes) && stepMinutes > 0 ? stepMinutes : 1;
+    const maxTries = 24 * 60; 
     let cur = startAt;
 
     for (let i = 0; i < maxTries; i += 1) {
       const r = await trySave(todoId, cur);
       if (r === "ok") return { ok: true as const, startAt: cur };
       if (r === "error") return { ok: false as const };
-      cur = addMinutes(cur, stepMinutes);
+      cur = addMinutes(cur, step);
     }
 
     return { ok: false as const };
@@ -223,7 +229,7 @@ export default function TimeBlockCreateTaskPage() {
 
       const r = await trySave(todoId, startAt);
       if (r === "ok") {
-        navigate("/timeblock", { replace: true });
+        navigate(`/timeblock?date=${encodeURIComponent(dateYmd)}`, { replace: true });
         return;
       }
 
@@ -237,8 +243,8 @@ export default function TimeBlockCreateTaskPage() {
     return () => window.removeEventListener("timeblockCreate:save", handler as EventListener);
   }, [pickedTask, dateYmd, navigate]);
 
-  if (!pickedGoal) return <Navigate to="/timeblock/create/goal" replace />;
-  if (!pickedFolder) return <Navigate to="/timeblock/create/folder" replace />;
+  if (!pickedGoal) return <Navigate to={`/timeblock/create/goal${dateQuery}`} replace />;
+  if (!pickedFolder) return <Navigate to={`/timeblock/create/folder${dateQuery}`} replace />;
 
   if (isLoading) {
     return (
@@ -269,11 +275,11 @@ export default function TimeBlockCreateTaskPage() {
     setConflictOpen(false);
     setPendingStartAt(null);
 
-    const stepMinutes = Math.max((pickedTask as any)?.minutes ?? 0, 30);
+    const stepMinutes = 1;
 
     const result = await saveWithAutoShift(todoId, pendingStartAt, stepMinutes);
     if (result.ok) {
-      navigate("/timeblock", { replace: true });
+      navigate(`/timeblock?date=${encodeURIComponent(dateYmd)}`, { replace: true });
     }
   };
 

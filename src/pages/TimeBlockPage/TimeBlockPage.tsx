@@ -386,7 +386,6 @@ export default function TimeBlockPage() {
         const next = { ...prev };
         for (const l of layoutsForDay) {
           if (l.todoId === vars.todoId) {
-            // revert to server state
             const serverDone = l.state === "complete";
             next[l.blockId] = serverDone;
           }
@@ -401,17 +400,37 @@ export default function TimeBlockPage() {
 
   const selectedDateStr = searchParams.get("date") ?? `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
 
+useEffect(() => {
+  sessionStorage.setItem("timetto_timeblock_date", selectedDateStr);
+}, [selectedDateStr]);
+
   const ROW_HEIGHT_PX = 64;
   const START_HOUR = 5;
   const START_MIN = START_HOUR * 60;
   const PX_PER_MIN = ROW_HEIGHT_PX / 60;
 
-  const { monthMatrix, selectedWeek, handlePickDate, hours } = useCalendarModel({
-    today,
-    searchParams,
-    setSearchParams,
-    isCondensed,
-  });
+const { monthMatrix, selectedWeek, hours } = useCalendarModel({
+  today,
+  searchParams,
+  setSearchParams,
+  isCondensed,
+});
+
+const pickDate = (dateStr: string) => {
+  const v = String(dateStr ?? "").trim();
+  if (!v) return;
+
+  setSearchParams(
+    (prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("date", v);
+      next.set("ym", v.slice(0, 7));
+      next.set("w", v);
+      return next;
+    },
+    { replace: true }
+  );
+};
 
   const { data: blocksForDay = [] } = useQuery({
     queryKey: ["timeblocks", "day", selectedDateStr],
@@ -473,7 +492,10 @@ export default function TimeBlockPage() {
     <div className="h-full w-full bg-white">
       <div ref={scrollRef} className="h-full w-full overflow-y-auto">
         <div ref={monthSectionRef} className="relative z-20">
-          <CalendarMonth dayLabels={DAY_LABELS} weeks={monthMatrix} onPickDate={handlePickDate} />
+          <CalendarMonth dayLabels={DAY_LABELS} weeks={monthMatrix} onPickDate={(d) => {
+            const dateStr = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+            pickDate(dateStr);
+          }} />
         </div>
 
         <div className="relative z-30">
@@ -484,7 +506,10 @@ export default function TimeBlockPage() {
             topPx={HEADER_HEIGHT_PX}
             heightPx={WEEK_STRIP_HEIGHT_PX}
             animMs={WEEK_STRIP_ANIM_MS}
-            onPickDate={handlePickDate}
+            onPickDate={(d) => {
+              const dateStr = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+              pickDate(dateStr);
+            }}
           />
         </div>
 
