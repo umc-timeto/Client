@@ -10,6 +10,8 @@ type KakaoLoginResponse = {
     memberId?: number | string;
     accessToken?: string;
     refreshToken?: string;
+    name?: string;
+    email?: string;
   };
 };
 
@@ -67,12 +69,18 @@ export default function KakaoCallbackPage() {
 
         const accessToken = payload?.data?.accessToken ?? "";
         const memberId = payload?.data?.memberId;
+        const name = payload?.data?.name ?? "";
+        const email = payload?.data?.email ?? "";
 
         if ((payload?.status ?? 0) !== 200) throw new Error("Login failed");
         if (!accessToken) throw new Error("Login failed");
 
         loginMock({
-          user: { id: String(memberId ?? ""), name: "사용자", email: "" },
+          user: {
+            id: String(memberId ?? ""),
+            name,
+            email,
+          },
           accessToken,
         });
 
