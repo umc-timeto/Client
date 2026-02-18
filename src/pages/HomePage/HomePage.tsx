@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import ConfirmModal from "@/components/ConfirmModal";
@@ -13,12 +13,15 @@ import MenuSvg from "@/assets/menu.svg?react";
 
 import { getFolderLightVar, getFolderNormalVar } from "@/utils/ColorMapping";
 
-import { getFoldersByGoal, setFolderOrders, type FolderItem } from "@/api/folderApi";
 import { goalApi } from "@/apis/GoalPage/goal";
 import { api } from "@/apis/api";
 
+// ✅ 서버 폴더 API (FolderPage 폴더 기준)
+import { folderApi } from "@/apis/FolderPage/folder.api";
+import type { FolderDto } from "@/apis/FolderPage/folder.types";
+
 //========================
-//STEP 1: 유틸
+// 유틸: 배열 내 id 기준 재정렬
 //========================
 function reorderByIds<T extends { id: string }>(list: T[], fromId: string, toId: string) {
   const fromIndex = list.findIndex((it) => it.id === fromId);
@@ -36,8 +39,7 @@ type OpenMenu = {
 };
 
 //========================
-//STEP 2: UI에서 쓰는 Goal 타입
-//- 기존 HomePage 코드(g.title, g.color, g.id)를 유지하기 위한 변환 타입
+// UI Goal 타입
 //========================
 type UiGoalItem = {
   id: string;
@@ -46,8 +48,15 @@ type UiGoalItem = {
 };
 
 //========================
-//STEP 3: API -> UI 변환
+// UI Folder 타입
+// - 서버 ingTodoCount -> UI todoCount로 매핑
 //========================
+type UiFolderItem = {
+  id: string;
+  name: string;
+  todoCount: number;
+};
+
 function toUiGoalItem(it: { id: number; name: string; color: string }): UiGoalItem {
   return {
     id: String(it.id),
@@ -56,9 +65,16 @@ function toUiGoalItem(it: { id: number; name: string; color: string }): UiGoalIt
   };
 }
 
+function toUiFolderItem(dto: FolderDto): UiFolderItem {
+  return {
+    id: String(dto.id),
+    name: dto.name,
+    todoCount: dto.ingTodoCount ?? 0,
+  };
+}
+
 //========================
-//STEP 4: 목표 삭제 API
-//- goalApi 파일은 팀장님이 같이 쓰는 중이라 건드리지 않고 여기서만 사용
+// 목표 삭제 API
 //========================
 async function deleteGoalApi(goalId: number) {
   await api.delete(`/api/goals/${goalId}`);
@@ -69,63 +85,89 @@ export default function HomePage() {
   const location = useLocation();
 
   const [goals, setGoals] = useState<UiGoalItem[]>([]);
-  const [addSheetOpen, setAddSheetOpen] = useState(false);
+  const [foldersByGoalId, setFoldersByGoalId] = useState<Record<string, UiFolderItem[]>>({});
 
+  const [addSheetOpen, setAddSheetOpen] = useState(false);
   const [openMenu, setOpenMenu] = useState<OpenMenu | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UiGoalItem | null>(null);
 
-  //폴더 리렌더 트리거(로컬스토리지 기반이라 강제 리렌더 필요)
-  const [folderTick, setFolderTick] = useState(0);
-
-  //드래그 상태
+  // 드래그 상태
   const [draggingFolderId, setDraggingFolderId] = useState<string | null>(null);
   const [draggingGoalId, setDraggingGoalId] = useState<string | null>(null);
 
   //========================
-  //STEP 1: 목표 리스트 로드(API)
+  // 목표 리스트 로드
   //========================
   const fetchGoals = useCallback(async () => {
     try {
       const list = await goalApi.getGoalList();
-      setGoals(list.map(toUiGoalItem));
-      setFolderTick((n) => n + 1);
+      const uiGoals = list.map(toUiGoalItem);
+      setGoals(uiGoals);
+      return uiGoals;
     } catch (e) {
       console.error(e);
       setGoals([]);
-      setFolderTick((n) => n + 1);
+      return [] as UiGoalItem[];
     }
   }, []);
 
   //========================
-  //초기 로드/재진입 로드
+  // goalId별 폴더 로드
   //========================
-  useEffect(() => {
-    fetchGoals();
-  }, [fetchGoals]);
+  const fetchFoldersForGoals = useCallback(async (uiGoals: UiGoalItem[]) => {
+    try {
+      const results = await Promise.all(
+        uiGoals.map(async (g) => {
+          const folders = await folderApi.getFoldersByGoal(Number(g.id));
+          return [g.id, folders.map(toUiFolderItem)] as const;
+        }),
+      );
 
-  //라우팅으로 홈 재진입 시에도 무조건 갱신(GoalPage 저장 후 돌아올 때 focus 안 바뀌는 케이스 커버)
-  useEffect(() => {
-    fetchGoals();
-  }, [location.key, fetchGoals]);
+      const next: Record<string, UiFolderItem[]> = {};
+      results.forEach(([goalId, folders]) => {
+        next[goalId] = folders;
+      });
 
-  //홈 화면으로 돌아오면(탭 다시 활성화) API 갱신 반영
-  useEffect(() => {
-    const onFocus = () => {
-      fetchGoals();
-    };
+      setFoldersByGoalId(next);
+    } catch (e) {
+      console.error(e);
+      setFoldersByGoalId({});
+    }
+  }, []);
 
+  //========================
+  // 홈 갱신(목표 -> 폴더 순으로)
+  //========================
+  const refreshHome = useCallback(async () => {
+    const uiGoals = await fetchGoals();
+    await fetchFoldersForGoals(uiGoals);
+  }, [fetchGoals, fetchFoldersForGoals]);
+
+  // 초기 로드
+  useEffect(() => {
+    refreshHome();
+  }, [refreshHome]);
+
+  // 라우팅으로 재진입 시 갱신
+  useEffect(() => {
+    refreshHome();
+  }, [location.key, refreshHome]);
+
+  // 탭 다시 활성화 시 갱신
+  useEffect(() => {
+    const onFocus = () => refreshHome();
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, [fetchGoals]);
+  }, [refreshHome]);
 
-  //헤더 + 버튼 이벤트 수신( AppHeaderAuto에서 쏘는 "home:add" )
+  // 헤더 + 버튼 이벤트 수신 (AppHeaderAuto가 "home:add" 쏨)
   useEffect(() => {
     const onOpen = () => setAddSheetOpen(true);
     window.addEventListener("home:add", onOpen as any);
     return () => window.removeEventListener("home:add", onOpen as any);
   }, []);
 
-  //바텀시트/모달 열리면 스크롤 잠금
+  // 바텀시트/모달 열리면 스크롤 잠금
   useEffect(() => {
     const anyOpen = addSheetOpen || !!deleteTarget;
     document.body.classList.toggle("no-scroll", anyOpen);
@@ -137,17 +179,6 @@ export default function HomePage() {
 
   const isEmpty = goals.length === 0;
 
-  //========================
-  //목표별 폴더 캐시
-  //========================
-  const foldersByGoalId = useMemo(() => {
-    const map = new Map<string, FolderItem[]>();
-    goals.forEach((g) => {
-      map.set(g.id, getFoldersByGoal(g.id));
-    });
-    return map;
-  }, [goals, folderTick]);
-
   const onClickAddGoal = () => {
     setAddSheetOpen(false);
     navigate("/goal");
@@ -156,6 +187,19 @@ export default function HomePage() {
   const onClickAddFolder = () => {
     setAddSheetOpen(false);
     navigate("/folder/select");
+  };
+
+  // ✅ 목표 박스 내부에서 폴더 추가(해당 goalId 들고 이동)
+  const onClickAddFolderInGoal = (goalId: string) => {
+    setAddSheetOpen(false);
+
+    const q = new URLSearchParams();
+    q.set("mode", "create");
+    q.set("step", "2");
+    q.set("goalId", goalId);
+    q.set("canSave", "0");
+
+    navigate(`/folder/select?${q.toString()}`);
   };
 
   const onClickEditGoal = (g: UiGoalItem) => {
@@ -186,11 +230,12 @@ export default function HomePage() {
     }
 
     setDeleteTarget(null);
-    fetchGoals();
-  }, [deleteTarget, fetchGoals]);
+    await refreshHome();
+  }, [deleteTarget, refreshHome]);
 
   //========================
-  //폴더 이동
+  // 폴더 이동(드래그&드롭) - 서버: moveFolder(folderId, newIndex)
+  // newIndex는 0-based
   //========================
   const onDragStartFolder = (goalId: string, folderId: string) => {
     setDraggingGoalId(goalId);
@@ -202,21 +247,43 @@ export default function HomePage() {
     setDraggingFolderId(null);
   };
 
-  const onDropFolder = (goalId: string, targetFolderId: string) => {
+  const onDropFolder = async (goalId: string, targetFolderId: string) => {
     if (!draggingGoalId || !draggingFolderId) return;
     if (draggingGoalId !== goalId) return;
     if (draggingFolderId === targetFolderId) return;
 
-    const cur = getFoldersByGoal(goalId);
+    const cur = foldersByGoalId[goalId] ?? [];
     const next = reorderByIds(cur, draggingFolderId, targetFolderId);
-    setFolderOrders(goalId, next.map((f) => f.id));
-    setFolderTick((n) => n + 1);
+
+    const newIndex = next.findIndex((f) => f.id === draggingFolderId);
+    if (newIndex < 0) return;
+
+    // UI 먼저 반영
+    setFoldersByGoalId((prev) => ({ ...prev, [goalId]: next }));
+
+    try {
+      await folderApi.moveFolder(Number(draggingFolderId), newIndex);
+
+      // 서버 동기화
+      const refreshed = await folderApi.getFoldersByGoal(Number(goalId));
+      setFoldersByGoalId((prev) => ({ ...prev, [goalId]: refreshed.map(toUiFolderItem) }));
+    } catch (e) {
+      console.error(e);
+
+      // 실패 시 롤백
+      try {
+        const rollback = await folderApi.getFoldersByGoal(Number(goalId));
+        setFoldersByGoalId((prev) => ({ ...prev, [goalId]: rollback.map(toUiFolderItem) }));
+      } catch (e2) {
+        console.error(e2);
+      }
+    }
   };
 
   //========================
-  //폴더 클릭 이동
+  // 폴더 클릭 이동
   //========================
-  const goFolderPage = (g: UiGoalItem, f: FolderItem) => {
+  const goFolderPage = (g: UiGoalItem, f: UiFolderItem) => {
     const q = new URLSearchParams();
     q.set("folderId", f.id);
     q.set("folderName", f.name);
@@ -246,14 +313,14 @@ export default function HomePage() {
         <div className="flex flex-col gap-6">
           {goals.map((g) => {
             const flagColor = getFolderNormalVar(g.color);
-            const folderBg = getFolderLightVar(g.color); //mock.ts에서 -light-bg로 바뀌어야 함
+            const folderBg = getFolderLightVar(g.color);
             const todoColor = getFolderNormalVar(g.color);
 
-            const folders = foldersByGoalId.get(g.id) ?? [];
+            const folders = foldersByGoalId[g.id] ?? [];
 
             return (
               <div key={g.id}>
-                {/*목표 헤더 라인*/}
+                {/* 목표 헤더 */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="inline-flex h-7 w-7 items-center justify-center">
@@ -272,7 +339,6 @@ export default function HomePage() {
                       <Menu2Svg className="h-7 w-7" />
                     </button>
 
-                    {/*수정/삭제 메뉴(ActionMenu가 바깥 클릭 닫기 처리함)*/}
                     <ActionMenu
                       open={openMenu?.goalId === g.id}
                       onClose={() => setOpenMenu(null)}
@@ -284,65 +350,57 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {/*폴더 영역*/}
+                {/* 폴더 영역 */}
                 <div className="mt-3 overflow-hidden rounded-lg" style={{ background: folderBg }}>
                   {folders.length === 0 ? (
-                    <>
-                      {/*폴더 0개일 때만:추가 버튼*/}
-                      <button
-                        type="button"
-                        className="flex w-full items-center gap-3 px-4 py-5 text-left active:bg-black/5"
-                        onClick={onClickAddFolder}
-                      >
-                        <span className="text-grey-light-active text-[18px] leading-none">+</span>
-                        <span className="text-[15px] font-semibold text-grey-light-active">폴더를 추가하세요</span>
-                      </button>
-                    </>
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-3 px-4 py-5 text-left active:bg-black/5"
+                      onClick={() => onClickAddFolderInGoal(g.id)}
+                    >
+                      <span className="text-grey-light-active text-[18px] leading-none">+</span>
+                      <span className="text-[15px] font-semibold text-grey-light-active">폴더를 추가하세요</span>
+                    </button>
                   ) : (
-                    <>
-                      {/*폴더 리스트*/}
-                      <div className="divide-y" style={{ borderColor: "var(--color-grey-light)" }}>
-                        {folders.map((f) => (
-                          <button
-                            key={f.id}
-                            type="button"
-                            draggable
-                            onDragStart={() => onDragStartFolder(g.id, f.id)}
-                            onDragEnd={onDragEndFolder}
-                            onDragOver={(e) => e.preventDefault()}
-                            onDrop={() => onDropFolder(g.id, f.id)}
-                            onClick={() => goFolderPage(g, f)}
-                            className="flex w-full items-center justify-between pl-5 pr-4 active:bg-black/5"
-                            style={{
-                              height: 74,
-                              borderBottom: "1px solid var(--color-grey-light)",
-                            }}
-                          >
-                            {/*왼쪽:드래그 핸들 + 폴더 텍스트*/}
-                            <div className="flex min-w-0 flex-1 items-center gap-[11px]">
-                              <span className="inline-flex h-[27px] w-[27px] items-center justify-center">
-                                <MenuSvg className="h-4 w-4" />
-                              </span>
+                    <div className="divide-y" style={{ borderColor: "var(--color-grey-light)" }}>
+                      {folders.map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          draggable
+                          onDragStart={() => onDragStartFolder(g.id, f.id)}
+                          onDragEnd={onDragEndFolder}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={() => onDropFolder(g.id, f.id)}
+                          onClick={() => goFolderPage(g, f)}
+                          className="flex w-full items-center justify-between pl-5 pr-4 active:bg-black/5"
+                          style={{
+                            height: 74,
+                            borderBottom: "1px solid var(--color-grey-light)",
+                          }}
+                        >
+                          <div className="flex min-w-0 flex-1 items-center gap-[11px]">
+                            <span className="inline-flex h-[27px] w-[27px] items-center justify-center">
+                              <MenuSvg className="h-4 w-4" />
+                            </span>
 
-                              <div className="min-w-0 flex-1">
-                                <div className="text-left truncate text-[15px] font-semibold leading-[150%] text-[#3A3A3A]">
-                                  {f.name}
-                                </div>
-                                <div
-                                  className="text-left mt-[2px] text-[13px] font-normal leading-[150%]"
-                                  style={{ color: todoColor }}
-                                >
-                                  {`할 일 ${f.todoCount ?? 0}개`}
-                                </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-left truncate text-[15px] font-semibold leading-[150%] text-[#3A3A3A]">
+                                {f.name}
+                              </div>
+                              <div
+                                className="text-left mt-[2px] text-[13px] font-normal leading-[150%]"
+                                style={{ color: todoColor }}
+                              >
+                                {`할 일 ${f.todoCount ?? 0}개`}
                               </div>
                             </div>
+                          </div>
 
-                            {/*오른쪽:자리만 유지*/}
-                            <div className="h-7 w-7" />
-                          </button>
-                        ))}
-                      </div>
-                    </>
+                          <div className="h-7 w-7" />
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
@@ -351,7 +409,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/*하단 바텀시트*/}
+      {/* 하단 바텀시트 */}
       {addSheetOpen ? (
         <>
           <button
@@ -398,7 +456,7 @@ export default function HomePage() {
         </>
       ) : null}
 
-      {/*삭제 확인 모달*/}
+      {/* 삭제 확인 모달 */}
       <ConfirmModal
         open={!!deleteTarget}
         title="목표를 삭제하시겠어요?"

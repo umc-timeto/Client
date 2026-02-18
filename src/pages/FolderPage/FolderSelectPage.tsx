@@ -1,3 +1,4 @@
+// C:\Users\tndus\Client\src\pages\FolderPage\FolderSelectPage.tsx
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useHeaderActions } from "@/contexts/HeaderActionContext";
@@ -7,8 +8,10 @@ import UnderlineBox from "@/components/UnderlineBox";
 import FlagSvg from "@/assets/flag.svg?react";
 import NextSvg from "@/assets/next.svg?react";
 
-import { loadGoals, getFolderNormalVar, type GoalItem } from "@/pages/HomePage/mock";
-import { createFolder, getFolderByIdStr, updateFolderByIdStr } from "@/api/folderApi";
+import { getFolderNormalVar } from "@/utils/ColorMapping";
+
+import { goalApi } from "@/apis/GoalPage/goal";
+import { folderApi } from "@/apis/FolderPage/folder.api";
 
 const ACCENT_BLACK = "var(--color-black)";
 
@@ -16,6 +19,23 @@ function isValidFolderName(v: string) {
   if (v.length > 20) return false;
   if (v.trim().length === 0) return false;
   return true;
+}
+
+//========================
+// UI Goal 타입
+//========================
+type UiGoalItem = {
+  id: string;
+  title: string;
+  color: string;
+};
+
+function toUiGoalItem(it: { id: number; name: string; color: string }): UiGoalItem {
+  return {
+    id: String(it.id),
+    title: it.name,
+    color: it.color,
+  };
 }
 
 export default function FolderSelectPage() {
@@ -39,7 +59,7 @@ export default function FolderSelectPage() {
   //========================
   //목표 목록/선택
   //========================
-  const [goals, setGoals] = useState<GoalItem[]>([]);
+  const [goals, setGoals] = useState<UiGoalItem[]>([]);
   const [pickedGoalId, setPickedGoalId] = useState<string | null>(searchParams.get("goalId"));
 
   const pickedGoal = useMemo(() => {
@@ -56,16 +76,24 @@ export default function FolderSelectPage() {
   const folderActive = folderName.trim().length > 0;
 
   //edit: 목표 선택 없어도 저장 가능
-  const canSave = isEdit
-    ? isValidFolderName(folderName)
-    : !!pickedGoal && isValidFolderName(folderName);
+  const canSave = isEdit ? isValidFolderName(folderName) : !!pickedGoal && isValidFolderName(folderName);
 
   //========================
-  //초기 로드
+  //목표 로드(API)
   //========================
-  useEffect(() => {
-    setGoals(loadGoals());
+  const fetchGoals = useCallback(async () => {
+    try {
+      const list = await goalApi.getGoalList();
+      setGoals(list.map(toUiGoalItem));
+    } catch (e) {
+      console.error(e);
+      setGoals([]);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchGoals();
+  }, [fetchGoals]);
 
   //========================
   //edit 모드 프리필 (단 1회)
@@ -75,34 +103,45 @@ export default function FolderSelectPage() {
   useEffect(() => {
     if (prefilled) return;
 
-    //create는 프리필 필요 없음
     if (!isEdit) {
       setPrefilled(true);
       return;
     }
 
+    const goalIdFromQuery = searchParams.get("goalId");
+    if (!goalIdFromQuery) {
+      navigate("/home", { replace: true });
+      return;
+    }
+
     (async () => {
-      const f = await getFolderByIdStr(folderId!);
-      if (!f) {
-        //잘못된 id면 홈으로
+      try {
+        const list = await folderApi.getFoldersByGoal(Number(goalIdFromQuery));
+        const found = list.find((f) => String(f.id) === String(folderId));
+
+        if (!found) {
+          navigate("/home", { replace: true });
+          return;
+        }
+
+        // ✅ 프리필 state 세팅
+        setFolderName(found.name ?? "");
+        setPickedGoalId(String(goalIdFromQuery));
+
+        // ✅ edit 진입 쿼리 정리 + (중요) 프리필 값은 유효하니까 canSave=1로 시작
+        const next = new URLSearchParams(searchParams);
+        next.set("mode", "edit");
+        next.set("step", "2");
+        next.set("folderId", String(folderId));
+        next.set("goalId", String(goalIdFromQuery));
+        next.set("canSave", isValidFolderName(found.name ?? "") ? "1" : "0");
+        setSearchParams(next, { replace: true });
+
+        setPrefilled(true);
+      } catch (e) {
+        console.error(e);
         navigate("/home", { replace: true });
-        return;
       }
-
-      //기존 값 프리필
-      setFolderName(f.name ?? "");
-      setPickedGoalId(f.goalId ?? null);
-
-      //edit는 step2가 맞으니까 쿼리도 강제 정리(헤더/뒤로가기 꼬임 방지)
-      const next = new URLSearchParams(searchParams);
-      next.set("mode", "edit");
-      next.set("step", "2");
-      next.set("folderId", String(folderId));
-      if (f.goalId) next.set("goalId", String(f.goalId));
-      next.set("canSave", "0"); //프리필 후 아래 useEffect가 다시 덮어씀
-      setSearchParams(next, { replace: true });
-
-      setPrefilled(true);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefilled, isEdit, folderId, navigate]);
@@ -111,7 +150,6 @@ export default function FolderSelectPage() {
   //헤더가 읽는 canSave 쿼리 반영
   //========================
   useEffect(() => {
-    //프리필 전에는 깜빡임 방지
     if (!prefilled) return;
 
     const next = new URLSearchParams(searchParams);
@@ -124,33 +162,51 @@ export default function FolderSelectPage() {
   }, [prefilled, canSave]);
 
   //========================
-  //저장 동작(create/edit 분기)
+  //저장 동작(create/edit 분기) - 서버 API
   //========================
   const handleSave = useCallback(async () => {
     if (!prefilled) return;
     if (!canSave) return;
 
+    const nextName = folderName.trim();
+
     //edit
     if (isEdit && folderId) {
-      const nextName = folderName.trim();
-      await updateFolderByIdStr(folderId, { name: nextName });
+      try {
+        await folderApi.updateFolder(Number(folderId), { folderName: nextName });
 
-      //중요: -1로 돌아가면 folderName 쿼리가 옛날값이라 화면에서 안 바뀔 수 있음
-      //=> 폴더 페이지로 최신 이름을 들고 이동
-      navigate(
-        `/folder?folderId=${encodeURIComponent(folderId)}&folderName=${encodeURIComponent(nextName)}`,
-        { replace: true, state: { folderId, folderName: nextName } }
-      );
+      const goalId = searchParams.get("goalId") ?? "";
+      const goalName = searchParams.get("goalName") ?? "";
+      const goalColor = searchParams.get("goalColor") ?? "";
+
+      const q = new URLSearchParams();
+      q.set("folderId", String(folderId));
+      q.set("folderName", nextName);
+      if (goalId) q.set("goalId", goalId);
+      if (goalName) q.set("goalName", goalName);
+      if (goalColor) q.set("goalColor", goalColor);
+
+      navigate(`/folder?${q.toString()}`, {
+        replace: true,
+        state: { folderId: String(folderId), folderName: nextName, goalId, goalName, goalColor },
+      });
+
+      } catch (e) {
+        console.error(e);
+      }
       return;
     }
 
     //create
     if (!pickedGoal) return;
-    createFolder(pickedGoal.id, folderName.trim());
 
-    //저장 후 홈으로
-    navigate("/home");
-  }, [prefilled, canSave, isEdit, folderId, folderName, pickedGoal, navigate]);
+    try {
+      await folderApi.addFolder(Number(pickedGoal.id), { folderName: nextName });
+      navigate("/home");
+    } catch (e) {
+      console.error(e);
+    }
+  }, [prefilled, canSave, isEdit, folderId, folderName, pickedGoal, navigate, searchParams]);
 
   //헤더 저장 버튼 연결(AppHeaderAuto에서 complete 호출)
   useEffect(() => {
@@ -238,7 +294,6 @@ export default function FolderSelectPage() {
         </p>
       ) : null}
 
-      {/*선택된 목표 표시 (edit에서도 보여주되, 목표가 로드되기 전엔 안 뜰 수 있음)*/}
       {pickedGoal ? (
         <div className="mt-6 flex items-center gap-2">
           <FlagSvg className="h-4 w-4" style={{ color: getFolderNormalVar(pickedGoal.color) }} />
@@ -246,9 +301,10 @@ export default function FolderSelectPage() {
         </div>
       ) : null}
 
-      {/*폴더 이름 입력*/}
       <div className="mt-8">
         <UnderlineBox
+          // ✅ 핵심: 프리필 이후 input 동기화가 깨지는 경우가 있어서, edit 프리필 완료 시점에 리마운트
+          key={isEdit ? `edit-${folderId}-${prefilled}` : `create-${pickedGoalId}-${safeStep}`}
           label="폴더 이름"
           mode="input"
           active={folderActive}
