@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import CalPrevSvg from "@/assets/cal_prev.svg?react";
@@ -11,6 +12,8 @@ import BadEmojiSvg from "@/assets/bad_emoji.svg?react";
 
 import useCalendarModel from "@/hooks/TimeBlockPage/useCalendarModel";
 import CalendarMonth from "@/pages/TimeBlockPage/components/CalendarMonth";
+
+import { monthlyLogsApi } from "@/apis/MyLogPage/monthlyLogs";
 
 type Mood = "good" | "soso" | "bad";
 
@@ -38,23 +41,44 @@ export default function MyLogPage() {
   const fallbackYm = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}`;
   const ym = rawYm && /^\d{4}-\d{2}$/.test(rawYm) ? rawYm : fallbackYm;
 
+  const [yearStr, monthStr] = ym.split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+
   const { monthMatrix } = useCalendarModel({
     today,
     searchParams,
     setSearchParams,
   });
 
-  const mockMoodByDate = useMemo<Record<string, Mood>>(
-    () => ({
-      "2026-01-01": "good",
-      "2026-01-04": "soso",
-      "2026-01-08": "bad",
-      "2026-01-15": "good",
-      "2026-01-22": "soso",
-      "2026-01-26": "bad",
-    }),
-    []
-  );
+  const { data: monthlyLogs = [] } = useQuery({
+    queryKey: ["logs", "monthly", year, month],
+    queryFn: () => monthlyLogsApi.getMonthlyLogs({ year, month }),
+    enabled: Number.isFinite(year) && Number.isFinite(month) && month >= 1 && month <= 12,
+    staleTime: 30_000,
+  });
+
+  const moodByDate = useMemo<Record<string, Mood>>(() => {
+    const out: Record<string, Mood> = {};
+    for (const item of monthlyLogs) {
+      const key = String(item.date).trim();
+      if (!key) continue;
+      if (item.satisfaction === "GREAT") out[key] = "good";
+      else if (item.satisfaction === "SOSO") out[key] = "soso";
+      else if (item.satisfaction === "BAD") out[key] = "bad";
+    }
+    return out;
+  }, [monthlyLogs]);
+
+  const logIdByDate = useMemo<Record<string, number>>(() => {
+    const out: Record<string, number> = {};
+    for (const item of monthlyLogs) {
+      const key = String(item.date).trim();
+      if (!key) continue;
+      if (typeof item.logId === "number") out[key] = item.logId;
+    }
+    return out;
+  }, [monthlyLogs]);
 
   const goMonth = (delta: number) => {
     const nextYm = shiftYm(ym, delta);
@@ -65,22 +89,26 @@ export default function MyLogPage() {
 
   const toYmd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
-  const isFuture = (d: Date) => {
-    const a = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    const b = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-    return a > b;
-  };
-
   const handleCellClick = (cell: { date: Date; inMonth: boolean }) => {
     if (!cell.inMonth) return;
-    if (isFuture(cell.date)) return;
+
     const ymd = toYmd(cell.date);
-    navigate(`/survey?date=${ymd}`);
+    const todayYmd = toYmd(today);
+
+    if (ymd !== todayYmd) return;
+
+    const logId = logIdByDate[ymd];
+
+    const qs = new URLSearchParams();
+    qs.set("date", ymd);
+    if (typeof logId === "number") qs.set("logId", String(logId));
+
+    navigate(`/survey?${qs.toString()}`);
   };
 
   const renderEmoji = (cell: { date: Date; inMonth: boolean }) => {
     const key = `${cell.date.getFullYear()}-${pad2(cell.date.getMonth() + 1)}-${pad2(cell.date.getDate())}`;
-    const mood = mockMoodByDate[key];
+    const mood = moodByDate[key];
 
     if (!cell.inMonth) {
       return <DefaultEmojiSvg className="h-8 w-8" />;
@@ -116,7 +144,12 @@ export default function MyLogPage() {
           dayLabelClassName="text-grey-dark text-[12px]"
           showSelection={false}
           onCellClick={handleCellClick}
-          isCellDisabled={(cell) => !cell.inMonth || isFuture(cell.date)}
+          isCellDisabled={(cell) => {
+            if (!cell.inMonth) return true;
+            const ymd = toYmd(cell.date);
+            const todayYmd = toYmd(today);
+            return ymd !== todayYmd;
+          }}
         />
       </div>
     </div>

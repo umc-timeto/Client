@@ -74,7 +74,7 @@ export default function AppHeaderAuto({ onOpenDrawer }: AppHeaderAutoProps) {
   }) => (
     <button
       type="button"
-      className={`text-[20px] font-normal ${disabled ? "text-grey-light-active" : "text-yellow-normal"}`}
+      className={`text-[20px] font-normal ${disabled ? "text-grey-light-active" : "text-red-delete"}`}
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
     >
