@@ -1,5 +1,27 @@
 import type { ColorKey } from "@/constants/timeBlockCreateStore";
 
+export const colorHexToKey = (hex: unknown): ColorKey => {
+  let v = String(hex ?? "").trim().toUpperCase();
+
+  if (v && !v.startsWith("#")) {
+    v = `#${v}`;
+  }
+
+  const map: Record<string, ColorKey> = {
+    "#FF8373": "red",
+    "#F6AE14": "orange",
+    "#FFE240": "yellow",
+    "#D5F05F": "lightGreen",
+    "#75C7AD": "green",
+    "#8AE6EE": "cyan",
+    "#6FB7FF": "skyBlue",
+    "#638FFF": "blue",
+    "#C58BFF": "purple",
+    "#FF9FD4": "pink",
+  };
+
+  return map[v] ?? "green";
+};
 /**
  * 서버/저장소에서 오는 goal.color(hex)를
  * 우리 프로젝트의 ColorKey로 매핑한다.
@@ -7,23 +29,6 @@ import type { ColorKey } from "@/constants/timeBlockCreateStore";
  * 정책:
  * - 매핑 실패 시 "green"으로 고정
  */
-const HEX_TO_KEY: Record<string, ColorKey> = {
-  "#FF8373": "red",
-  "#F6AE14": "orange",
-  "#FFE240": "yellow",
-  "#D5F05F": "lightGreen",
-  "#75C7AD": "green",
-  "#8AE6EE": "cyan",
-  "#6FB7FF": "skyBlue",
-  "#638FFF": "blue",
-  "#C58BFF": "purple",
-  "#FF9FD4": "pink",
-};
-//매 호출마다 객체 새로 생성 방지 위해 상수로 분리
-export const colorHexToKey = (hex: unknown): ColorKey => {
-  const v = String(hex ?? "").trim().toUpperCase();
-  return HEX_TO_KEY[v] ?? "green";
-};
 
 /**
  * goal.color(hex) -> 폴더 컬러 normal 토큰 var

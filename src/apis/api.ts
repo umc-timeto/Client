@@ -2,30 +2,16 @@ import axios from "axios";
 
 const baseURL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
 const DEV_TOKEN = (import.meta.env.VITE_DEV_ACCESS_TOKEN as string | undefined)?.trim();
+const DEV_REFRESH_TOKEN = (import.meta.env.VITE_DEV_REFRESH_TOKEN as string | undefined)?.trim();
 
-/**
- * [DEBUG-ONLY] 개발 중에만 켜는 API 디버그 로그 플래그
- * - 배포 전에 false로 바꾸거나
- * - 아래 [DEBUG-ONLY] START ~ END 블록을 통째로 삭제하면 됨
- */
-const DEBUG_API = import.meta.env.DEV;
-
-/**
- * 개발환경에서 DEV_TOKEN이 있으면 localStorage에 accessToken을 "최초 1회" 자동 세팅
- * - 이미 accessToken이 있으면 덮어쓰지 않음
- * - 토큰을 바꿨는데 반영이 안 되면 localStorage의 accessToken을 지우고 새로고침
- */
 if (import.meta.env.DEV && DEV_TOKEN) {
-  const existing = localStorage.getItem("accessToken");
-  if (!existing) localStorage.setItem("accessToken", DEV_TOKEN);
-
-  // [DEBUG-ONLY] START
-  if (DEBUG_API) {
-    const now = localStorage.getItem("accessToken");
-    const masked = now ? `${now.slice(0, 15)}...` : "(없음)";
-    console.log("[API][개발토큰] accessToken 자동 세팅 상태:", masked);
+  if (!localStorage.getItem("accessToken")) {
+    localStorage.setItem("accessToken", DEV_TOKEN);
   }
-  // [DEBUG-ONLY] END
+
+  if (DEV_REFRESH_TOKEN && !localStorage.getItem("refreshToken")) {
+    localStorage.setItem("refreshToken", DEV_REFRESH_TOKEN);
+  }
 }
 
 export const api = axios.create({
@@ -117,3 +103,60 @@ api.interceptors.request.use((config) => {
 
   return config;
 });
+//
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (!originalRequest) {
+      return Promise.reject(error);
+    }
+
+    const status = error.response?.status;
+    const isAuthExpired = status === 401 || status === 403;
+
+    const reqUrl = String(originalRequest.url ?? "");
+    const isRefreshRequest = reqUrl.includes("/api/auth/refresh");
+
+    if (isAuthExpired && !isRefreshRequest && !(originalRequest as any)._retry) {
+      (originalRequest as any)._retry = true;
+
+      const refreshToken = localStorage.getItem("refreshToken");
+      if (!refreshToken) {
+        return Promise.reject(error);
+      }
+
+      try {
+        const res = await axios.post(
+          `${baseURL}/api/auth/refresh`,
+          { refreshToken },
+          { withCredentials: true }
+        );
+
+        const newAccessToken = res.data?.data?.accessToken;
+        const newRefreshToken = res.data?.data?.refreshToken;
+
+        if (newAccessToken) {
+          localStorage.setItem("accessToken", newAccessToken);
+          api.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
+          originalRequest.headers = originalRequest.headers ?? {};
+          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+        }
+
+        if (newRefreshToken) {
+          localStorage.setItem("refreshToken", newRefreshToken);
+        }
+
+        return api(originalRequest);
+      } catch (refreshError) {
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("refreshToken");
+        return Promise.reject(refreshError);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
