@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import UnderlineBox from "@/components/UnderlineBox";
 import { useHeaderActions } from "@/contexts/HeaderActionContext";
+import { goalPageApi } from "@/apis/GoalPage/goal.api";
 
 type GoalColor = {
   key: string;
@@ -23,76 +24,23 @@ const GOAL_COLORS: GoalColor[] = [
   { key: "cyan", name: "사이언", hex: "#8AE6EE" },
 ];
 
-//STEP2 localStorage 키
-const STORAGE_KEY = "timeto_goals";
-
-//STEP3 헤더/라인/아이콘 강조 컬러
+//STEP2 헤더/라인/아이콘 강조 컬러
 const ACCENT_YELLOW = "var(--color-yellow-normal)";
 
-//STEP4 API 요청 바디 타입
+//STEP3 API 요청 바디 타입
 type GoalCreateBody = {
   name: string;
   color: string;
 };
 
-//STEP5 로컬 저장 타입
-type GoalLocalItem = {
-  id: string;
-  name: string;
-  color: string;
-};
-
-//STEP6 목표 이름 검증(공백 포함 최대 20자, 공백만은 불가)
+//STEP4 목표 이름 검증(공백 포함 최대 20자, 공백만은 불가)
 function isValidGoalTitle(v: string) {
   if (v.length > 20) return false;
   if (v.trim().length === 0) return false;
   return true;
 }
 
-//STEP7 로컬 저장 데이터 로드(구버전 title/color도 호환)
-function loadGoals(): GoalLocalItem[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed
-      .map((it: any, idx: number) => {
-        const name =
-          typeof it?.name === "string"
-            ? it.name
-            : typeof it?.title === "string"
-              ? it.title
-              : "";
-        const color =
-          typeof it?.color === "string"
-            ? it.color
-            : typeof it?.colorHex === "string"
-              ? it.colorHex
-              : "";
-        const id =
-          typeof it?.id === "string" && it.id.length > 0
-            ? it.id
-            : typeof crypto !== "undefined"
-              ? crypto.randomUUID()
-              : `${Date.now()}-${idx}`;
-
-        if (!name || !color) return null;
-        return { id, name, color } as GoalLocalItem;
-      })
-      .filter(Boolean) as GoalLocalItem[];
-  } catch {
-    return [];
-  }
-}
-
-//STEP8 로컬 저장 데이터 세이브
-function saveGoals(next: GoalLocalItem[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-}
-
-//STEP9 아래 화살표 아이콘:stroke를 currentColor로 고정
+//STEP5 아래 화살표 아이콘:stroke를 currentColor로 고정
 function ChevronDown() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
@@ -108,10 +56,26 @@ function ChevronDown() {
   );
 }
 
+//STEP6 hex -> GoalColor 찾기(팔레트에 없으면 null)
+function findColorByHex(hex: string) {
+  const v = (hex ?? "").toUpperCase();
+  return GOAL_COLORS.find((c) => c.hex.toUpperCase() === v) ?? null;
+}
+
 export default function GoalPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { setOnComplete } = useHeaderActions();
+
+  //========================
+  //STEP0 mode/edit 파라미터
+  //========================
+  const mode = searchParams.get("mode") ?? "create"; //create | edit
+  const goalId = searchParams.get("goalId");
+  const isEdit = mode === "edit" && !!goalId;
+
+  const navState = location.state as { goalId?: string; title?: string; color?: string } | null;
 
   //========================
   //STEP1 입력/선택 상태
@@ -123,25 +87,73 @@ export default function GoalPage() {
   const [colorModalOpen, setColorModalOpen] = useState(false);
 
   //========================
-  //STEP2 헤더 버튼 표시/활성화 조건
+  //STEP2 edit 프리필(1회)
+  //========================
+  const [prefilled, setPrefilled] = useState(false);
+
+  useEffect(() => {
+    if (prefilled) return;
+
+    if (!isEdit || !goalId) {
+      setPrefilled(true);
+      return;
+    }
+
+    //STEP2-1 HomePage에서 넘어온 state 우선
+    const nextTitle = (navState?.title ?? "").slice(0, 20);
+    const nextColorHex = navState?.color ?? "";
+
+    if (nextTitle || nextColorHex) {
+      setTitle(nextTitle);
+      setColor(findColorByHex(nextColorHex));
+      setPrefilled(true);
+      return;
+    }
+
+    //STEP2-2 state가 없으면 서버에서 조회해서 goalId 매칭
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const list = await goalPageApi.getGoalList();
+        const target = list.find((g) => String(g.id) === goalId) ?? null;
+
+        if (cancelled) return;
+
+        setTitle((target?.name ?? "").slice(0, 20));
+        setColor(findColorByHex(target?.color ?? ""));
+        setPrefilled(true);
+      } catch (e) {
+        if (cancelled) return;
+        console.error(e);
+        setPrefilled(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [prefilled, isEdit, goalId, navState]);
+
+  //========================
+  //STEP3 헤더 버튼 표시/활성화 조건
   //========================
   const titleActive = title.trim().length > 0;
   const titleValid = isValidGoalTitle(title);
-
   const colorActive = color !== null;
 
-  //STEP3 입력 시작 시점에 저장 버튼 표시
+  //입력 시작 시점에 저장 버튼 표시
   const showSave = titleFocused || titleActive || colorModalOpen || colorActive;
 
-  //STEP4 이름+색상 모두 유효하면 저장 활성화
+  //이름+색상 모두 유효하면 저장 활성화
   const canSave = titleValid && colorActive;
 
-  //STEP5 색상 입력 라인/아이콘 활성 조건
+  //색상 입력 라인/아이콘 활성 조건
   const colorFieldFocused = colorModalOpen && !colorActive;
   const chevronActive = colorModalOpen || colorActive;
 
   //========================
-  //STEP3 API 요청 바디 생성
+  //STEP4 API 요청 바디 생성
   //========================
   const buildGoalCreateBody = useCallback((): GoalCreateBody => {
     return {
@@ -151,7 +163,7 @@ export default function GoalPage() {
   }, [title, color]);
 
   //========================
-  //STEP4 헤더(AppHeaderAuto)가 참조하는 showSave/canSave 쿼리 반영
+  //STEP5 헤더(AppHeaderAuto)가 참조하는 showSave/canSave 쿼리 반영
   //========================
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
@@ -159,17 +171,15 @@ export default function GoalPage() {
     if (showSave) next.set("showSave", "1");
     else next.delete("showSave");
 
-    if (canSave) next.set("canSave", "1");
-    else next.set("canSave", "0");
+    next.set("canSave", canSave ? "1" : "0");
 
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showSave, canSave]);
+  }, [showSave, canSave, searchParams, setSearchParams]);
 
   //========================
-  //STEP5 모달 열릴 때 바디 스크롤 잠금
+  //STEP6 모달 열릴 때 바디 스크롤 잠금
   //========================
   useEffect(() => {
     if (!colorModalOpen) return;
@@ -183,35 +193,35 @@ export default function GoalPage() {
   }, [colorModalOpen]);
 
   //========================
-  //STEP6 저장 동작(localStorage mock)
+  //STEP7 저장 동작(API 연동)
   //========================
-  const handleSave = useCallback(async () => {
-    if (!canSave) return;
+  const [saving, setSaving] = useState(false);
 
-    //STEP6-1 API 요청 바디 생성
-    const body = buildGoalCreateBody();
+const handleSave = useCallback(async () => {
+  if (!canSave || saving) return;
 
-    //STEP6-2 로컬 저장 형태
-    const localItem: GoalLocalItem = {
-      id: crypto.randomUUID(),
-      name: body.name,
-      color: body.color,
-    };
+  setSaving(true);
+  const body = buildGoalCreateBody();
 
-    //STEP6-3 localStorage 저장
-    const prev = loadGoals();
-    const next = [...prev, localItem];
-    saveGoals(next);
+  try {
+    if (isEdit && goalId) {
+      await goalPageApi.updateGoal(Number(goalId), body);
+      navigate("/home", { replace: true });
+      return;
+    }
 
-    //STEP6-4 화면 이동
-    navigate("/home");
+    await goalPageApi.addGoal(body);
+    navigate("/home", { replace: true });
+  } catch (e) {
+    console.error(e);
+  } finally {
+    setSaving(false);
+  }
+}, [canSave, saving, buildGoalCreateBody, isEdit, goalId, navigate]);
 
-    //STEP6-5 나중에 API 연결 시 여기만 교체
-    //await addGoal(body);
-  }, [canSave, buildGoalCreateBody, navigate]);
 
   //========================
-  //STEP7 헤더 "저장" 버튼 동작 등록
+  //STEP8 헤더 "저장" 버튼 동작 등록
   //========================
   useEffect(() => {
     setOnComplete(() => handleSave);
@@ -219,21 +229,33 @@ export default function GoalPage() {
   }, [setOnComplete, handleSave]);
 
   //========================
-  //STEP 1: 목표 생성 UI
+  //UI
   //========================
   return (
     <div className="bg-white px-5 pt-8">
       {/*상단 안내 타이틀*/}
       <h1 className="text-[24px] font-bold leading-[33.6px] text-black">
-        달성하고 싶은 목표를
-        <br />
-        입력해주세요
+        {isEdit ? (
+          <>
+            목표를
+            <br />
+            수정해주세요
+          </>
+        ) : (
+          <>
+            달성하고 싶은 목표를
+            <br />
+            입력해주세요
+          </>
+        )}
       </h1>
 
       {/*상단 안내 서브 텍스트*/}
-      <p className="mt-2 font-pretendard text-[14px] font-medium leading-normal text-green-normal">
-        한 달 이상 지속할 장기 목표면 더 좋아요
-      </p>
+      {!isEdit ? (
+        <p className="mt-2 font-pretendard text-[14px] font-medium leading-normal text-green-normal">
+          한 달 이상 지속할 장기 목표면 더 좋아요
+        </p>
+      ) : null}
 
       {/*목표 이름 입력*/}
       <div className="mt-10">
@@ -262,9 +284,7 @@ export default function GoalPage() {
           placeholder=" "
           onClick={() => setColorModalOpen(true)}
           leftSlot={
-            color ? (
-              <div className="h-5 w-5 rounded-full" style={{ backgroundColor: color.hex }} />
-            ) : null
+            color ? <div className="h-5 w-5 rounded-full" style={{ backgroundColor: color.hex }} /> : null
           }
           rightSlot={
             <div
@@ -290,9 +310,7 @@ export default function GoalPage() {
 
           {/*모달 바텀시트:가운데 정렬 고정 크기*/}
           <div className="fixed inset-x-0 bottom-0 z-1000 flex justify-center">
-            {/*모달 컨테이너:피그마 고정 크기*/}
             <div className="mb-6 rounded-2xl bg-white p-5 shadow-lg">
-              {/*모달 헤더*/}
               <div className="flex items-center justify-between">
                 <div className="title-16-semibold text-gray-700">색상 선택</div>
                 <button
@@ -305,7 +323,6 @@ export default function GoalPage() {
                 </button>
               </div>
 
-              {/*팔레트 그리드*/}
               <div className="mt-4 grid grid-cols-5 gap-3">
                 {GOAL_COLORS.map((c) => {
                   const selected = color?.key === c.key;

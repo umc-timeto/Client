@@ -66,6 +66,37 @@ function toStrId(v: number | string) {
   return String(v);
 }
 
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+//======================================
+//[추가: UI에서 필요한 단건 조회/수정] (edit 프리필/저장용)
+//- TaskPage가 getTaskById/updateTask 쓰는 것처럼, 폴더도 동일 패턴 제공
+//======================================
+export async function getFolderByIdStr(folderId: string): Promise<FolderItem | null> {
+  const all = loadAll();
+  return all.find((f) => f.id === folderId) ?? null;
+}
+
+export async function updateFolderByIdStr(
+  folderId: string,
+  patch: Partial<Pick<FolderItem, "name">>
+): Promise<FolderItem | null> {
+  const all = loadAll();
+  const idx = all.findIndex((f) => f.id === folderId);
+  if (idx < 0) return null;
+
+  const cur = all[idx];
+  const updated: FolderItem = { ...cur, ...patch, id: cur.id, goalId: cur.goalId };
+
+  all[idx] = updated;
+  saveAll(all);
+
+  await new Promise((r) => setTimeout(r, 120));
+  return updated;
+}
+
 //======================================
 //[API 스펙 맞춘 함수들] (나중에 axios로 교체될 자리)
 //======================================
@@ -140,11 +171,9 @@ export async function apiCreateFolder(input: { goalId: number; name: string }) {
 }
 
 //3) 폴더 수정 PATCH /api/folder/{folderId}
-export async function apiUpdateFolder(folderId: number, input: { name: string }) {
+//- 서버 붙기 전: number가 아니라 string id(f_...)로도 들어올 수 있어서 둘 다 대응
+export async function apiUpdateFolder(folderId: number | string, input: { name: string }) {
   const all = loadAll();
-
-  //목업은 id가 f_...라 folderId(number)로 찾기 어려움 → 일단 "문자열로 받은 경우" 대비
-  //나중에 서버 붙으면 여기 로직 필요 없어짐.
   const folderIdStr = toStrId(folderId);
 
   const idx = all.findIndex((f) => f.id === folderIdStr);
@@ -166,7 +195,7 @@ export async function apiUpdateFolder(folderId: number, input: { name: string })
     code: "COMMON200",
     message: "폴더 이름이 변경되었습니다.",
     result: {
-      folderId,
+      folderId: typeof folderId === "number" ? folderId : -1,
       name: input.name,
       updatedAt: new Date().toISOString(),
     },
@@ -174,7 +203,7 @@ export async function apiUpdateFolder(folderId: number, input: { name: string })
 }
 
 //4) 폴더 삭제 DELETE /api/folder/{folderId}
-export async function apiDeleteFolder(folderId: number) {
+export async function apiDeleteFolder(folderId: number | string) {
   const all = loadAll();
   const folderIdStr = toStrId(folderId);
 
@@ -190,10 +219,9 @@ export async function apiDeleteFolder(folderId: number) {
 }
 
 //5) 폴더 이동 PATCH /api/folder/{folderId}/move  { newIndex }
-export async function apiMoveFolder(folderId: number, input: { newIndex: number }) {
+export async function apiMoveFolder(folderId: number | string, input: { newIndex: number }) {
   //백엔드 newIndex는 0/1 기반이 불확실한데, 너 예시가 "newIndex: 2"라서
-  //일단 "0 기반"이라고 가정하면 위험함.
-  //=> 여기선 "1 기반"으로 처리(= order = newIndex)로 둠. 서버 붙을 때 확정해서 바꾸면 됨.
+  //여기선 "1 기반"으로 처리(= order = newIndex). 서버 붙을 때 확정해서 바꾸면 됨.
   const all = loadAll();
   const folderIdStr = toStrId(folderId);
 
@@ -210,8 +238,7 @@ export async function apiMoveFolder(folderId: number, input: { newIndex: number 
   const fromIdx = inGoal.findIndex((f) => f.id === folderIdStr);
   if (fromIdx < 0) return { status: 200, code: "COMMON200", message: "ok", data: {} };
 
-  //newIndex를 1기반으로 보고 0기반 index로 변환
-  const toIdx = Math.max(0, Math.min(inGoal.length - 1, (input.newIndex ?? 1) - 1));
+  const toIdx = clamp((input.newIndex ?? 1) - 1, 0, inGoal.length - 1);
 
   const nextInGoal = [...inGoal];
   const [picked] = nextInGoal.splice(fromIdx, 1);
