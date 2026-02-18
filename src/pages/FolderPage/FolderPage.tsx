@@ -1,3 +1,4 @@
+//C:\Users\tndus\Client\src\pages\FolderPage\FolderPage.tsx
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
@@ -89,7 +90,28 @@ function parseApiDurationToMinutes(v: string | null | undefined): number {
   return Math.max(0, h * 60 + m);
 }
 
-type UiTaskWithOrder = Task & { _sortOrder?: number };
+//========================
+//✅ 날짜 표시 유틸 (01/31 (토))
+//- startAt 없으면 렌더 자체 안 함
+//========================
+const WEEK_KOR = ["일", "월", "화", "수", "목", "금", "토"] as const;
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+function formatMMDD(d: Date) {
+  return `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`;
+}
+function formatHHMM(d: Date) {
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function formatMMDD_DOW(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${formatMMDD(d)} (${WEEK_KOR[d.getDay()]})`;
+}
+
+type UiTaskWithOrder = Task & { _sortOrder?: number; _startAt?: string | null };
 
 function toUiTaskFromSummary(dto: TodoSummaryDto, state: ApiTodoState): UiTaskWithOrder {
   return {
@@ -100,20 +122,8 @@ function toUiTaskFromSummary(dto: TodoSummaryDto, state: ApiTodoState): UiTaskWi
     priority: apiPriorityToUi(dto.priority),
     isDone: state === "complete",
     _sortOrder: dto.sortOrder,
+    _startAt: dto.startAt ?? null,
   };
-}
-
-//========================
-//✅ 날짜/시간 포맷(무조건 2자리)
-//========================
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
-}
-function formatMMDD(d: Date) {
-  return `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`;
-}
-function formatHHMM(d: Date) {
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
 export default function FolderPage() {
@@ -192,7 +202,7 @@ export default function FolderPage() {
   //========================
   //✅ 모달 상단 시간 표시용 detail 상태
   //========================
-  const [modalTimeText, setModalTimeText] = useState<string>("-"); // "02/18, 16:35 - 17:45" 같은 형태로 만들거면 확장 가능
+  const [modalTimeText, setModalTimeText] = useState<string>("-");
   const [modalDateText, setModalDateText] = useState<string>("--/--");
 
   //========================
@@ -244,14 +254,14 @@ export default function FolderPage() {
   //========================
   useEffect(() => {
     if (!openTaskId) {
-      setModalTimeText("-");
+      setModalTimeText("00:00-00:00");
       setModalDateText("--/--");
       return;
     }
 
     const todoId = Number(openTaskId);
     if (!Number.isFinite(todoId)) {
-      setModalTimeText("-");
+      setModalTimeText("00:00-00:00");
       setModalDateText("--/--");
       return;
     }
@@ -260,9 +270,8 @@ export default function FolderPage() {
       try {
         const dto = await taskApi.getTodo(todoId);
 
-        //startAt 없으면 표시 불가
         if (!dto.startAt) {
-          setModalTimeText("-");
+          setModalTimeText("00:00-00:00");
           setModalDateText("--/--");
           return;
         }
@@ -271,7 +280,6 @@ export default function FolderPage() {
         const minutes = parseApiDurationToMinutes(dto.duration);
         const end = new Date(start.getTime() + minutes * 60 * 1000);
 
-        //요구 포맷: 00/00 , 00:00 - 00:00
         setModalDateText(formatMMDD(start));
         setModalTimeText(`${formatHHMM(start)} - ${formatHHMM(end)}`);
       } catch (e) {
@@ -540,8 +548,16 @@ export default function FolderPage() {
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       <MenuGreenSvg className="h-[11.25px] w-3" />
+
                       <div className="min-w-0">
                         <div className="truncate text-[15px] font-semibold leading-[150%] text-[#2C2C2C]">{t.title}</div>
+
+                        {/* ✅ startAt 있을 때만 날짜 표시 */}
+                        {t._startAt ? (
+                          <div className="mt-1 font-pretendard text-[13px] font-normal leading-[150%] text-[#00857D]">
+                            {formatMMDD_DOW(t._startAt)}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
 
@@ -594,8 +610,16 @@ export default function FolderPage() {
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       <MenuYellowSvg className="h-[11.25px] w-3" />
+
                       <div className="min-w-0">
                         <div className="truncate text-[15px] font-semibold leading-[150%] text-[#B0B0B0] line-through">{t.title}</div>
+
+                        {/* ✅ startAt 있을 때만 날짜 표시 */}
+                        {t._startAt ? (
+                          <div className="mt-1 font-pretendard text-[13px] font-normal leading-[150%] text-[#00857D]">
+                            {formatMMDD_DOW(t._startAt)}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
 
@@ -639,9 +663,11 @@ export default function FolderPage() {
               </button>
             </div>
 
-            {/* ✅ 날짜 + 시간 범위 */}
+            {/* 날짜 + 시간 범위 */}
             <div className="mt-4 text-center text-[14px] font-semibold text-[#767676]">{modalDateText}</div>
-            <div className="mt-2 text-center text-[28px] font-semibold leading-normal text-gray-700">{modalTimeText}</div>
+            <div className="mt-2 text-center font-pretendard text-[28px] font-semibold leading-normal text-[#2C2C2C]">
+              {modalTimeText}
+            </div>
 
             <div className="mt-6 space-y-3">
               <div className="flex items-center justify-between">
