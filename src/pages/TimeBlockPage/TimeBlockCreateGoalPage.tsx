@@ -1,4 +1,5 @@
-import { useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import type { ColorKey } from "@/constants/timeBlockCreateStore";
 import { useTimeBlockCreateStore } from "@/constants/timeBlockCreateStore";
 import { useQuery } from "@tanstack/react-query";
@@ -12,6 +13,16 @@ const colorVar = (key: ColorKey, tone: "nomal" | "light") => `var(--color-folder
 
 export default function TimeBlockCreateGoalPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const dateParam = searchParams.get("date") ?? sessionStorage.getItem("timetto_timeblock_date");
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    console.log("[TimeBlockCreateGoalPage] search:", window.location.search);
+    console.log("[TimeBlockCreateGoalPage] dateParam:", dateParam);
+  }, [dateParam]);
+
+  const dateQuery = dateParam ? `?date=${encodeURIComponent(dateParam)}` : "";
   const pickedGoal = useTimeBlockCreateStore((s) => s.pickedGoal);
   const setGoal = useTimeBlockCreateStore((s) => s.setGoal);
 
@@ -53,7 +64,7 @@ export default function TimeBlockCreateGoalPage() {
                     name: title,
                     colorKey,
                   });
-                  navigate("/timeblock/create/folder");
+                  navigate(`/timeblock/create/folder${dateQuery}`);
                 }}
                 left={
                   <div className="p-1.25 mr-1.25">

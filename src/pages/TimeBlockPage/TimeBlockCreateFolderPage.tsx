@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { folderApi } from "@/apis/FolderPage/folder";
 import { useTimeBlockCreateStore } from "@/constants/timeBlockCreateStore";
 import SelectRow from "@/pages/TimeBlockPage/components/TimeBlockCreate/SelectRow";
@@ -7,12 +7,15 @@ import NextSvg from "@/assets/next-dark.svg?react";
 
 export default function TimeBlockCreateFolderPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const dateParam = searchParams.get("date") ?? sessionStorage.getItem("timetto_timeblock_date");
+  const dateQuery = dateParam ? `?date=${encodeURIComponent(dateParam)}` : "";
   const pickedGoal = useTimeBlockCreateStore((s) => s.pickedGoal);
   const pickedFolder = useTimeBlockCreateStore((s) => s.pickedFolder);
   const setFolder = useTimeBlockCreateStore((s) => s.setFolder);
 
   if (!pickedGoal) {
-    return <Navigate to="/timeblock/create/goal" replace />;
+    return <Navigate to={`/timeblock/create/goal${dateQuery}`} replace />;
   }
 
   const goalId = Number(pickedGoal.id);
@@ -46,7 +49,7 @@ export default function TimeBlockCreateFolderPage() {
                   name: f.name,
                   ingTodoCount: f.ingTodoCount,
                 } as any);
-                navigate("/timeblock/create/task");
+                navigate(`/timeblock/create/task${dateQuery}`);
               }}
               right={
                 <div className="flex items-center">
