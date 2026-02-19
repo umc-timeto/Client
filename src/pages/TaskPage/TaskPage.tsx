@@ -1,3 +1,4 @@
+//C:\Users\tndus\Client\src\pages\TaskPage\TaskPage.tsx
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import TimePickerModel from "@/components/TimePickerModel";
@@ -112,7 +113,7 @@ export default function TaskPage() {
       q.set(OPEN_TASK_QUERY_KEY, openId);
       return `/folder?${q.toString()}`;
     },
-    [folderId, folderName, goalId, goalName, goalColor]
+    [folderId, folderName, goalId, goalName, goalColor],
   );
 
   //========================
@@ -201,7 +202,9 @@ export default function TaskPage() {
       if (!folderId || !Number.isFinite(folderIdNum)) return;
 
       try {
-        //edit
+        //========================
+        //edit: 폴더 복귀 시 openTaskId 붙여서 모달 유지(O)
+        //========================
         if (taskId) {
           if (!draft) return;
           const todoId = Number(taskId);
@@ -221,18 +224,18 @@ export default function TaskPage() {
           return;
         }
 
-        //create
+        //========================
+        //create: 폴더 복귀 시 openTaskId 없이 그냥 폴더만(OX 모달)
+        //========================
         if (!draft) return;
 
-        const created = await taskApi.addTodo(folderIdNum, {
+        await taskApi.addTodo(folderIdNum, {
           name: draft.title,
           priority: uiPriorityToApi(draft.priority),
           duration: minutesToApiDuration(draft.durationMinutes),
         });
 
-        const createdId = String(created.todoId ?? "");
-        const to = returnTo === "folder" ? buildFolderReturnUrl(createdId) : buildFolderBaseUrl();
-
+        const to = buildFolderBaseUrl();
         navigate(to, {
           replace: true,
           state: { folderId, folderName, goalId, goalName, goalColor },
