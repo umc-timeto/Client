@@ -471,13 +471,12 @@ export default function TimeBlockPage() {
   const location = useLocation();
 
   
-  const defaultTodayStr = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
-  const [selectedDateStr, setSelectedDateStr] = useState(() => searchParams.get("date") ?? defaultTodayStr);
+const defaultTodayStr = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
 
-  useEffect(() => {
-    const next = searchParams.get("date") ?? defaultTodayStr;
-    setSelectedDateStr(next);
-  }, [searchParams, defaultTodayStr]);
+const selectedDateStr = useMemo(
+  () => searchParams.get("date") ?? defaultTodayStr,
+  [searchParams, defaultTodayStr]
+);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const monthSectionRef = useRef<HTMLDivElement | null>(null);
@@ -625,28 +624,27 @@ const { monthMatrix, selectedWeek, hours } = useCalendarModel({
   isCondensed,
 });
 
-const pickDate = (dateStr: string) => {
-  const v = String(dateStr ?? "").trim();
-  if (!v) return;
+const pickDate = useCallback(
+  (dateStr: string) => {
+    const v = String(dateStr ?? "").trim();
+    if (!v) return;
 
-  
-  setSelectedDateStr(v);
-
-  setSearchParams(
-    (prev) => {
-      const next = new URLSearchParams(prev);
-      next.set("date", v);
-      next.set("ym", v.slice(0, 7));
-      next.set("w", v);
-      return next;
-    },
-    { replace: true }
-  );
-};
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("date", v);
+        next.set("ym", v.slice(0, 7));
+        next.set("w", v);
+        return next;
+      },
+      { replace: true }
+    );
+  },
+  [setSearchParams]
+);
 
 const {
   data: blocksForDay = [],
-  refetch,
 } = useQuery({
   queryKey: ["timeblocks", selectedDateStr],
   queryFn: () => timeBlockDayApi.getTimeBlocksByDay(selectedDateStr),
@@ -690,7 +688,6 @@ const {
       const deltaMinRaw = e.delta?.y ? e.delta.y / PX_PER_MIN : 0;
       if (!Number.isFinite(deltaMinRaw) || Math.abs(deltaMinRaw) < 0.5) return;
 
-      
       const snap = 5;
       const deltaMin = Math.round(deltaMinRaw / snap) * snap;
 
@@ -700,10 +697,8 @@ const {
 
       const nextStartAdj = Math.min(maxStart, Math.max(minStart, layout.startAdj + deltaMin));
 
-      
       const deltaX = e.delta?.x ?? 0;
 
-      
       const dayOffset = Math.round(deltaX / 200);
 
       const targetDateStr =
@@ -717,9 +712,6 @@ const {
       const sourceDateStr = selectedDateStr;
       const movedAcrossDay = dayOffset !== 0;
 
-      
-      
-      
       const nextStartAtStr = formatLocalStartAt(nextStartDt) + ":00";
       const nextEndAtStr = formatLocalStartAt(nextEndDt) + ":00";
 
@@ -736,17 +728,14 @@ const {
           });
         });
       } else {
-        
         queryClient.setQueryData<BlockDayItem[]>(["timeblocks", sourceDateStr], (prev) => {
           const arr = Array.isArray(prev) ? prev : [];
           return arr.filter((b) => String(b.blockId) !== activeId);
         });
 
-        
         queryClient.setQueryData<BlockDayItem[]>(["timeblocks", targetDateStr], (prev) => {
           const arr = Array.isArray(prev) ? prev : [];
 
-          
           const fromSource = blocksForDay.find((b) => String(b.blockId) === activeId);
 
           const base: BlockDayItem = fromSource
@@ -771,13 +760,10 @@ const {
             ? arr.map((b) => (String(b.blockId) === activeId ? base : b))
             : [...arr, base];
 
-          
           nextArr.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
           return nextArr;
         });
 
-        
-        setSelectedDateStr(targetDateStr);
         setSearchParams(
           (prev) => {
             const next = new URLSearchParams(prev);
@@ -789,12 +775,10 @@ const {
           { replace: true }
         );
 
-        
         queryClient.invalidateQueries({ queryKey: ["timeblocks", targetDateStr] });
         queryClient.invalidateQueries({ queryKey: ["timeblocks", sourceDateStr] });
       }
 
-      
       moveBlockMutation.mutate({
         blockId: layout.blockId,
         startAt: formatLocalStartAt(nextStartDt),
@@ -863,14 +847,20 @@ const {
     return () => io.disconnect();
   }, []);
 
+  // Memoized callback for calendar date picking
+  const onPickDateFromCalendar = useCallback(
+    (d: Date) => {
+      const dateStr = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+      pickDate(dateStr);
+    },
+    [pickDate]
+  );
+
   return (
     <div className="h-full w-full bg-white">
       <div ref={scrollRef} className="h-full w-full overflow-y-auto">
         <div ref={monthSectionRef} className="relative z-20">
-          <CalendarMonth dayLabels={DAY_LABELS} weeks={monthMatrix} onPickDate={(d) => {
-            const dateStr = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-            pickDate(dateStr);
-          }} />
+          <CalendarMonth dayLabels={DAY_LABELS} weeks={monthMatrix} onPickDate={onPickDateFromCalendar} />
         </div>
 
         <div className="relative z-30">
@@ -881,10 +871,7 @@ const {
             topPx={HEADER_HEIGHT_PX}
             heightPx={WEEK_STRIP_HEIGHT_PX}
             animMs={WEEK_STRIP_ANIM_MS}
-            onPickDate={(d) => {
-              const dateStr = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-              pickDate(dateStr);
-            }}
+            onPickDate={onPickDateFromCalendar}
           />
         </div>
 
