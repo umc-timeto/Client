@@ -1,3 +1,4 @@
+// C:\Users\tndus\Client\src\components\UnderlineBox.tsx
 import type { ReactNode } from "react";
 
 type Props = {
@@ -16,6 +17,10 @@ type Props = {
   onInputFocus?: () => void;
   onInputBlur?: () => void;
 
+  //IME 조합 이벤트(모바일 한글 입력 안정화용)
+  onInputCompositionStart?: () => void;
+  onInputCompositionEnd?: () => void;
+
   //button용
   onClick?: () => void;
 
@@ -25,8 +30,7 @@ type Props = {
 };
 
 //피그마값(입력/선택 텍스트): #0F0F0F / 22px / 600 / H=25
-const VALUE_TEXT_CLS =
-  "font-pretendard text-[22px] font-semibold leading-[25px]";
+const VALUE_TEXT_CLS = "font-pretendard text-[22px] font-semibold leading-[25px]";
 
 export default function FormFieldUnderline({
   label,
@@ -40,6 +44,8 @@ export default function FormFieldUnderline({
   onInputChange,
   onInputFocus,
   onInputBlur,
+  onInputCompositionStart,
+  onInputCompositionEnd,
   onClick,
   leftSlot,
   rightSlot,
@@ -54,10 +60,7 @@ export default function FormFieldUnderline({
     <div>
       {/*라벨*/}
       <div
-        className={[
-          "font-pretendard text-[13px] font-medium leading-normal",
-          labelColor,
-        ].join(" ")}
+        className={["font-pretendard text-[13px] font-medium leading-normal", labelColor].join(" ")}
         style={focused && !active ? { color: accentColor } : undefined}
       >
         {label}
@@ -65,10 +68,7 @@ export default function FormFieldUnderline({
 
       {/*밑줄 영역*/}
       <div
-        className={[
-          "mt-3 w-full border-b pb-2 flex items-center gap-2",
-          borderColor,
-        ].join(" ")}
+        className={["mt-3 w-full border-b pb-2 flex items-center gap-2", borderColor].join(" ")}
         style={focused && !active ? { borderColor: accentColor } : undefined}
       >
         {leftSlot ? <div className="shrink-0">{leftSlot}</div> : null}
@@ -79,20 +79,13 @@ export default function FormFieldUnderline({
             onChange={(e) => onInputChange?.(e.target.value)}
             onFocus={onInputFocus}
             onBlur={onInputBlur}
-            className={[
-              "w-full bg-transparent outline-none",
-              VALUE_TEXT_CLS,
-              valueColor,
-            ].join(" ")}
+            onCompositionStart={onInputCompositionStart}
+            onCompositionEnd={onInputCompositionEnd}
+            className={["w-full bg-transparent outline-none", VALUE_TEXT_CLS, valueColor].join(" ")}
             style={{ height: 25, caretColor }}
           />
         ) : (
-          <button
-            type="button"
-            onClick={onClick}
-            className="w-full text-left"
-            aria-label={label}
-          >
+          <button type="button" onClick={onClick} className="w-full text-left" aria-label={label}>
             <span className="block" style={{ height: 25 }}>
               <span
                 className={[VALUE_TEXT_CLS, valueColor].join(" ")}

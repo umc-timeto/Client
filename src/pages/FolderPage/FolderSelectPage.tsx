@@ -73,6 +73,9 @@ export default function FolderSelectPage() {
   const [folderName, setFolderName] = useState("");
   const [folderFocused, setFolderFocused] = useState(false);
 
+  //STEP1 모바일 한글 조합 상태
+  const [isComposing, setIsComposing] = useState(false);
+
   const folderActive = folderName.trim().length > 0;
 
   //edit: 목표 선택 없어도 저장 가능
@@ -124,11 +127,11 @@ export default function FolderSelectPage() {
           return;
         }
 
-        // ✅ 프리필 state 세팅
+        //STEP1 프리필 state 세팅
         setFolderName(found.name ?? "");
         setPickedGoalId(String(goalIdFromQuery));
 
-        // ✅ edit 진입 쿼리 정리 + (중요) 프리필 값은 유효하니까 canSave=1로 시작
+        //STEP2 edit 진입 쿼리 정리 + 초기 canSave 세팅
         const next = new URLSearchParams(searchParams);
         next.set("mode", "edit");
         next.set("step", "2");
@@ -147,10 +150,12 @@ export default function FolderSelectPage() {
   }, [prefilled, isEdit, folderId, navigate]);
 
   //========================
-  //헤더가 읽는 canSave 쿼리 반영
+  //헤더가 읽는 canSave 쿼리 반영(조합 중 금지)
   //========================
   useEffect(() => {
     if (!prefilled) return;
+    //STEP1 한글 조합 중에는 URL 업데이트 금지
+    if (isComposing) return;
 
     const next = new URLSearchParams(searchParams);
     next.set("canSave", canSave ? "1" : "0");
@@ -159,7 +164,7 @@ export default function FolderSelectPage() {
       setSearchParams(next, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefilled, canSave]);
+  }, [prefilled, canSave, isComposing]);
 
   //========================
   //저장 동작(create/edit 분기) - 서버 API
@@ -175,22 +180,21 @@ export default function FolderSelectPage() {
       try {
         await folderApi.updateFolder(Number(folderId), { folderName: nextName });
 
-      const goalId = searchParams.get("goalId") ?? "";
-      const goalName = searchParams.get("goalName") ?? "";
-      const goalColor = searchParams.get("goalColor") ?? "";
+        const goalId = searchParams.get("goalId") ?? "";
+        const goalName = searchParams.get("goalName") ?? "";
+        const goalColor = searchParams.get("goalColor") ?? "";
 
-      const q = new URLSearchParams();
-      q.set("folderId", String(folderId));
-      q.set("folderName", nextName);
-      if (goalId) q.set("goalId", goalId);
-      if (goalName) q.set("goalName", goalName);
-      if (goalColor) q.set("goalColor", goalColor);
+        const q = new URLSearchParams();
+        q.set("folderId", String(folderId));
+        q.set("folderName", nextName);
+        if (goalId) q.set("goalId", goalId);
+        if (goalName) q.set("goalName", goalName);
+        if (goalColor) q.set("goalColor", goalColor);
 
-      navigate(`/folder?${q.toString()}`, {
-        replace: true,
-        state: { folderId: String(folderId), folderName: nextName, goalId, goalName, goalColor },
-      });
-
+        navigate(`/folder?${q.toString()}`, {
+          replace: true,
+          state: { folderId: String(folderId), folderName: nextName, goalId, goalName, goalColor },
+        });
       } catch (e) {
         console.error(e);
       }
@@ -289,9 +293,7 @@ export default function FolderSelectPage() {
       </h1>
 
       {!isEdit ? (
-        <p className="mt-2 text-[14px] font-medium leading-normal text-green-normal">
-          목표를 작게 나눌수록 달성하기 쉬워요
-        </p>
+        <p className="mt-2 text-[14px] font-medium leading-normal text-green-normal">목표를 작게 나눌수록 달성하기 쉬워요</p>
       ) : null}
 
       {pickedGoal ? (
@@ -303,7 +305,6 @@ export default function FolderSelectPage() {
 
       <div className="mt-8">
         <UnderlineBox
-          // ✅ 핵심: 프리필 이후 input 동기화가 깨지는 경우가 있어서, edit 프리필 완료 시점에 리마운트
           key={isEdit ? `edit-${folderId}-${prefilled}` : `create-${pickedGoalId}-${safeStep}`}
           label="폴더 이름"
           mode="input"
@@ -314,6 +315,8 @@ export default function FolderSelectPage() {
           onInputChange={(v) => setFolderName(v.slice(0, 20))}
           onInputFocus={() => setFolderFocused(true)}
           onInputBlur={() => setFolderFocused(false)}
+          onInputCompositionStart={() => setIsComposing(true)}
+          onInputCompositionEnd={() => setIsComposing(false)}
         />
       </div>
     </div>
