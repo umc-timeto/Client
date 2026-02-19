@@ -150,12 +150,10 @@ export default function FolderSelectPage() {
   }, [prefilled, isEdit, folderId, navigate]);
 
   //========================
-  //헤더가 읽는 canSave 쿼리 반영(조합 중 금지)
+  //헤더가 읽는 canSave 쿼리 반영
   //========================
   useEffect(() => {
     if (!prefilled) return;
-    //STEP1 한글 조합 중에는 URL 업데이트 금지
-    if (isComposing) return;
 
     const next = new URLSearchParams(searchParams);
     next.set("canSave", canSave ? "1" : "0");
@@ -163,8 +161,7 @@ export default function FolderSelectPage() {
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefilled, canSave, isComposing]);
+  }, [prefilled, canSave, searchParams, setSearchParams]);
 
   //========================
   //저장 동작(create/edit 분기) - 서버 API
