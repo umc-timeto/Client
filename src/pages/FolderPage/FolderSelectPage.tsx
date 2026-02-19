@@ -74,7 +74,7 @@ export default function FolderSelectPage() {
   const [folderFocused, setFolderFocused] = useState(false);
 
   //STEP1 모바일 한글 조합 상태
-  const [isComposing, setIsComposing] = useState(false);
+  const [, setIsComposing] = useState(false);
 
   const folderActive = folderName.trim().length > 0;
 
