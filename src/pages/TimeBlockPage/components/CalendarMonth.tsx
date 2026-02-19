@@ -39,7 +39,6 @@ function DroppableMonthCell({
   cellButtonClassName,
   dayCircleClassName,
   renderCellBottom,
-  showSelection,
   onPickDate,
   onCellClick,
 }: {

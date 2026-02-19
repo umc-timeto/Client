@@ -800,25 +800,30 @@ const {
 
   useEffect(() => {
     setDoneIds((prev) => {
+      let changed = false;
       const next: Record<string, boolean> = { ...prev };
 
       for (const l of layoutsForDay) {
         const key = String(l.blockId);
 
-        
         if (pendingStatusBlockIdsRef.current.has(key)) continue;
 
-        
-        next[key] = l.state === "complete";
+        const v = l.state === "complete";
+        if (next[key] !== v) {
+          next[key] = v;
+          changed = true;
+        }
       }
 
-      
       const existing = new Set(layoutsForDay.map((l) => String(l.blockId)));
       for (const k of Object.keys(next)) {
-        if (!existing.has(k)) delete next[k];
+        if (!existing.has(k)) {
+          delete next[k];
+          changed = true;
+        }
       }
 
-      return next;
+      return changed ? next : prev;
     });
   }, [layoutsForDay]);
 
@@ -847,7 +852,6 @@ const {
     return () => io.disconnect();
   }, []);
 
-  // Memoized callback for calendar date picking
   const onPickDateFromCalendar = useCallback(
     (d: Date) => {
       const dateStr = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
