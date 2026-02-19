@@ -6,7 +6,8 @@ import type { Satisfaction, Achievement } from "@/apis/MyLogPage/logs";
 type UpdateLogRequest = {
   answer1: Satisfaction;
   answer2: Achievement;
-  answer3: string;
+  answer3: string | null;
+  date: string;
 };
 
 type UpdateLogResponse = {
@@ -20,7 +21,8 @@ type Params = {
   logId: number | null;
   answer1: Satisfaction | null;
   answer2: Achievement | null;
-  answer3: string;
+  answer3?: string | null;
+  date?: string;
   debounceMs?: number;
   enabled?: boolean;
   trigger?: number;
@@ -33,6 +35,7 @@ export function useAutoUpdateLog({
   answer1,
   answer2,
   answer3,
+  date,
   debounceMs = 500,
   enabled = true,
   trigger,
@@ -43,19 +46,19 @@ export function useAutoUpdateLog({
     if (!enabled) return false;
     if (!logId) return false;
     if (!answer1 || !answer2) return false;
-    if (!answer3.trim()) return false;
     return true;
-  }, [enabled, logId, answer1, answer2, answer3]);
+  }, [enabled, logId, answer1, answer2]);
 
   const latestRef = useRef({
     answer1: answer1 as Satisfaction | null,
     answer2: answer2 as Achievement | null,
     answer3: answer3,
+    date: date as string,
   });
 
   useEffect(() => {
-    latestRef.current = { answer1, answer2, answer3 };
-  }, [answer1, answer2, answer3]);
+    latestRef.current = { answer1, answer2, answer3, date: date as string };
+  }, [answer1, answer2, answer3, date]);
 
   const lastTriggerRef = useRef<number | null>(null);
 
@@ -85,11 +88,15 @@ export function useAutoUpdateLog({
     const timer = window.setTimeout(() => {
       const cur = latestRef.current;
       if (!cur.answer1 || !cur.answer2) return;
+      if (!cur.date) return;
+
+      const trimmed = (cur.answer3 ?? "").trim();
 
       mutation.mutate({
         answer1: cur.answer1,
         answer2: cur.answer2,
-        answer3: cur.answer3.trim(),
+        answer3: trimmed.length > 0 ? trimmed : null,
+        date: cur.date,
       });
     }, debounceMs);
 
