@@ -1,11 +1,10 @@
 //C:\Users\tndus\Client\src\pages\FolderPage\FolderPage.tsx
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-
-import type { Task } from "@/types/task";
 
 import ActionMenu from "@/components/ActionMenu";
 import ConfirmModal from "@/components/ConfirmModal";
+import TaskInfoModal from "@/components/TaskInfoModal";
 
 import FlagSvg from "@/assets/flag.svg?react";
 import EditSvg from "@/assets/edit.svg?react";
@@ -13,14 +12,16 @@ import DeleteSvg from "@/assets/delete.svg?react";
 
 import MenuGreenSvg from "@/assets/menu_green.svg?react";
 import MenuYellowSvg from "@/assets/menu_yellow.svg?react";
-import NextDarkSvg from "@/assets/next-dark.svg?react";
 
 import FProgressSvg from "@/assets/f_progress.svg?react";
 import FDoneSvg from "@/assets/f_done.svg?react";
 
 import { folderApi } from "@/apis/FolderPage/folder.api";
 import { taskApi } from "@/apis/TaskPage/task.api";
-import type { ApiPriority, ApiTodoState, TodoSummaryDto } from "@/apis/TaskPage/task.types";
+
+//✅ utils로 분리한 것들
+import { toUiTaskFromSummary, type UiTaskWithOrder } from "@/utils/TaskMapping";
+import { formatDuration, formatMMDD_DOW, buildModalDateTimeTexts } from "@/utils/TaskTime";
 
 //✅ dnd-kit(모바일 터치 드래그 지원)
 import {
@@ -37,17 +38,8 @@ import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } 
 import { CSS } from "@dnd-kit/utilities";
 
 //========================
-//유틸
+//아이콘 유틸(이건 페이지 로컬 유지)
 //========================
-function formatDuration(minutes: number) {
-  const m = Math.max(0, minutes ?? 0);
-  const h = Math.floor(m / 60);
-  const mm = m % 60;
-  if (h > 0 && mm > 0) return `${h}H ${mm}M`;
-  if (h > 0) return `${h}H`;
-  return `${mm}M`;
-}
-
 function PlusGreenIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
@@ -71,65 +63,6 @@ function PlusGreyRotateIcon() {
 }
 
 //========================
-//API <-> UI 매핑
-//========================
-function apiPriorityToUi(p: ApiPriority): Task["priority"] {
-  if (p === "HIGH") return "상";
-  if (p === "MEDIUM") return "중";
-  return "하";
-}
-
-function parseApiDurationToMinutes(v: string | null | undefined): number {
-  const s = String(v ?? "").trim();
-  if (!s) return 0;
-
-  const hMatch = s.match(/(\d+)\s*H/i);
-  const mMatch = s.match(/(\d+)\s*M/i);
-
-  const h = hMatch ? Number(hMatch[1]) : 0;
-  const m = mMatch ? Number(mMatch[1]) : 0;
-
-  if (!Number.isFinite(h) || !Number.isFinite(m)) return 0;
-  return Math.max(0, h * 60 + m);
-}
-
-//========================
-//✅ 날짜 표시 유틸 (01/31 (토))
-//- startAt 없으면 렌더 자체 안 함
-//========================
-const WEEK_KOR = ["일", "월", "화", "수", "목", "금", "토"] as const;
-
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
-}
-function formatMMDD(d: Date) {
-  return `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`;
-}
-function formatHHMM(d: Date) {
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-}
-function formatMMDD_DOW(iso: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${formatMMDD(d)} (${WEEK_KOR[d.getDay()]})`;
-}
-
-type UiTaskWithOrder = Task & { _sortOrder?: number; _startAt?: string | null };
-
-function toUiTaskFromSummary(dto: TodoSummaryDto, state: ApiTodoState): UiTaskWithOrder {
-  return {
-    id: String(dto.todoId),
-    folderId: "",
-    title: dto.name,
-    durationMinutes: parseApiDurationToMinutes(dto.duration),
-    priority: apiPriorityToUi(dto.priority),
-    isDone: state === "complete",
-    _sortOrder: dto.sortOrder,
-    _startAt: dto.startAt ?? null,
-  };
-}
-
-//========================
 //STEP 1: Sortable Row(핸들만 드래그 가능)
 //========================
 function SortableTaskRow(props: {
@@ -144,14 +77,16 @@ function SortableTaskRow(props: {
     data: { section },
   });
 
-  //STEP2 드래그 중 "슉슉" 이동 효과
+  //드래그 중 "슉슉" 이동 효과
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   } as React.CSSProperties;
 
   const isDone = section === "done";
-  const rowHover = isDone ? "hover:bg-yellow-light-hover active:bg-yellow-light-active" : "hover:bg-green-light-hover active:bg-green-light-active";
+  const rowHover = isDone
+    ? "hover:bg-yellow-light-hover active:bg-yellow-light-active"
+    : "hover:bg-green-light-hover active:bg-green-light-active";
   const titleClass = isDone
     ? "truncate text-[15px] font-semibold leading-[150%] text-[#B0B0B0] line-through"
     : "truncate text-[15px] font-semibold leading-[150%] text-[#2C2C2C]";
@@ -164,12 +99,7 @@ function SortableTaskRow(props: {
     <div
       ref={setNodeRef}
       style={style}
-      className={[
-        "flex w-full items-center justify-between px-4 py-6 text-left",
-        rowHover,
-        isDragging ? "opacity-70" : "",
-      ].join(" ")}
-      //STEP3 Row 클릭 시 모달 오픈
+      className={["flex w-full items-center justify-between px-4 py-6 text-left", rowHover, isDragging ? "opacity-70" : ""].join(" ")}
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -177,9 +107,9 @@ function SortableTaskRow(props: {
         if (e.key === "Enter") onClick();
       }}
     >
-      {/*할 일 Row:왼쪽(핸들 + 텍스트)*/}
+      {/*왼쪽(핸들 + 텍스트)*/}
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        {/*드래그 핸들:모바일 터치 드래그 시작 지점*/}
+        {/*드래그 핸들*/}
         <div
           className="touch-none select-none cursor-grab active:cursor-grabbing"
           {...attributes}
@@ -203,7 +133,7 @@ function SortableTaskRow(props: {
         </div>
       </div>
 
-      {/*할 일 Row:오른쪽(중요도 + 소요시간)*/}
+      {/*오른쪽(중요도 + 소요시간)*/}
       <div className="flex items-center gap-2">
         <span
           className="flex h-5.5 w-5.5 items-center justify-center rounded-xs text-[12px] font-semibold leading-[120%] text-white"
@@ -301,16 +231,13 @@ export default function FolderPage() {
   //할 일 정보 모달
   //========================
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
-  const modalPanelRef = useRef<HTMLDivElement | null>(null);
 
   const openTask = useMemo(() => {
     if (!openTaskId) return null;
     return progressTasks.find((t) => t.id === openTaskId) ?? doneTasks.find((t) => t.id === openTaskId) ?? null;
   }, [openTaskId, progressTasks, doneTasks]);
 
-  //========================
-  //✅ 모달 상단 시간 표시용 detail 상태
-  //========================
+  //모달 상단 문구
   const [modalTimeText, setModalTimeText] = useState<string>("-");
   const [modalDateText, setModalDateText] = useState<string>("--/--");
 
@@ -359,7 +286,7 @@ export default function FolderPage() {
   }, [modalTaskIdFromQuery]);
 
   //========================
-  //✅ openTaskId가 열리면 detail 조회해서 시간/날짜 계산
+  //openTaskId 열리면 detail 조회해서 모달 시간/날짜 세팅
   //========================
   useEffect(() => {
     if (!openTaskId) {
@@ -378,19 +305,10 @@ export default function FolderPage() {
     (async () => {
       try {
         const dto = await taskApi.getTodo(todoId);
+        const { dateText, timeText } = buildModalDateTimeTexts({ startAt: dto.startAt, duration: dto.duration });
 
-        if (!dto.startAt) {
-          setModalTimeText("00:00-00:00");
-          setModalDateText("--/--");
-          return;
-        }
-
-        const start = new Date(dto.startAt);
-        const minutes = parseApiDurationToMinutes(dto.duration);
-        const end = new Date(start.getTime() + minutes * 60 * 1000);
-
-        setModalDateText(formatMMDD(start));
-        setModalTimeText(`${formatHHMM(start)} - ${formatHHMM(end)}`);
+        setModalDateText(dateText);
+        setModalTimeText(timeText);
       } catch (e) {
         console.error(e);
         setModalTimeText("-");
@@ -412,7 +330,7 @@ export default function FolderPage() {
   }, [openTaskId, deleteConfirmOpen, menuOpen]);
 
   //========================
-  //✅ 할 일 추가 이동(goal 정보 같이 넘김)
+  //할 일 추가 이동(goal 정보 같이 넘김)
   //========================
   const goTaskAdd = () => {
     const q = new URLSearchParams();
@@ -462,7 +380,7 @@ export default function FolderPage() {
   };
 
   //========================
-  //✅ 편집 이동(goal 정보 같이 넘김)
+  //편집 이동(goal 정보 같이 넘김)
   //========================
   const goEditStep1 = () => {
     if (!openTask) return;
@@ -503,7 +421,7 @@ export default function FolderPage() {
     const section = String((e.active.data.current as any)?.section ?? "");
     setDraggingId(String(e.active.id));
     setDraggingSection(section === "done" ? "done" : "progress");
-      console.log("DRAG START", e.active.id, e.active.data.current); //디버깅용
+    console.log("DRAG START", e.active.id, e.active.data.current); //디버깅용
   }, []);
 
   const onDragEnd = useCallback(
@@ -520,10 +438,10 @@ export default function FolderPage() {
       setDraggingId(null);
       setDraggingSection(null);
 
-      //STEP1 드롭 대상이 없으면 종료
+      //드롭 대상 없으면 종료
       if (!overId) return;
 
-      //STEP2 같은 섹션 내에서만 reorder 허용
+      //같은 섹션 내에서만 reorder
       if (activeSection !== overSection) return;
       if (activeId === overId) return;
 
@@ -605,15 +523,7 @@ export default function FolderPage() {
   const doneIds = useMemo(() => doneTasks.map((t) => t.id), [doneTasks]);
 
   return (
-    //========================
-    //STEP 1: 드래그 컨텍스트(모바일 포함)
-    //========================
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-    >
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={onDragStart} onDragEnd={onDragEnd}>
       <div className="bg-white px-5 pt-6 pb-24">
         <div className="mb-6 flex items-center justify-center gap-2">
           <FlagSvg className="h-4 w-4" style={{ color: goalColor }} />
@@ -633,7 +543,7 @@ export default function FolderPage() {
           className="right-5 top-25"
         />
 
-        {/* 진행 섹션 */}
+        {/*진행 섹션*/}
         <div className="flex gap-3">
           <div className="flex w-4 flex-col items-center">
             <FProgressSvg className="h-6 w-6" />
@@ -662,28 +572,17 @@ export default function FolderPage() {
               <button
                 type="button"
                 onClick={goTaskAdd}
-                className={[
-                  "flex w-full items-center justify-start gap-3 rounded-lg bg-[#E6F7F6] py-7 pl-5",
-                  "hover:bg-[#D9F2F0] active:bg-[#CDEDEA]",
-                ].join(" ")}
+                className={["flex w-full items-center justify-start gap-3 rounded-lg bg-[#E6F7F6] py-7 pl-5", "hover:bg-[#D9F2F0] active:bg-[#CDEDEA]"].join(" ")}
               >
                 <PlusGreenIcon />
                 <span className="text-[13px] font-semibold leading-[150%] text-[#00857D]">할 일을 추가하세요</span>
               </button>
             ) : (
-              //========================
-              //STEP 2: 진행 Sortable
-              //========================
               <SortableContext items={progressIds} strategy={verticalListSortingStrategy}>
                 <div className="overflow-hidden rounded-lg border border-[#00B1A6] bg-white">
                   <div className="divide-y divide-[#B0E7E3]">
                     {progressTasks.map((t) => (
-                      <SortableTaskRow
-                        key={t.id}
-                        section="progress"
-                        task={t}
-                        onClick={() => setOpenTaskId(t.id)}
-                      />
+                      <SortableTaskRow key={t.id} section="progress" task={t} onClick={() => setOpenTaskId(t.id)} />
                     ))}
                   </div>
                 </div>
@@ -692,7 +591,7 @@ export default function FolderPage() {
           </div>
         </div>
 
-        {/* 완료 섹션 */}
+        {/*완료 섹션*/}
         {doneCount > 0 && (
           <div className="mt-8 flex gap-3">
             <div className="flex w-4 flex-col items-center">
@@ -708,19 +607,11 @@ export default function FolderPage() {
                 <div className="h-7 w-7" />
               </div>
 
-              {/*========================
-                STEP 3: 완료 Sortable
-              ========================*/}
               <SortableContext items={doneIds} strategy={verticalListSortingStrategy}>
                 <div className="overflow-hidden rounded-lg border border-[#F7941D] bg-white">
                   <div className="divide-y divide-[#FFE7B0]">
                     {doneTasks.map((t) => (
-                      <SortableTaskRow
-                        key={t.id}
-                        section="done"
-                        task={t}
-                        onClick={() => setOpenTaskId(t.id)}
-                      />
+                      <SortableTaskRow key={t.id} section="done" task={t} onClick={() => setOpenTaskId(t.id)} />
                     ))}
                   </div>
                 </div>
@@ -729,104 +620,21 @@ export default function FolderPage() {
           </div>
         )}
 
-        {/* 할 일 정보 모달 */}
-        {openTask && (
-          <div
-            role="dialog"
-            aria-modal="true"
-            className="fixed inset-0 z-50 flex items-end justify-center bg-black/20 px-4 pb-6"
-            onMouseDown={(e) => {
-              if (e.target === e.currentTarget) closeModal();
-            }}
-          >
-            <div
-              ref={modalPanelRef}
-              className="w-full max-w-105 rounded-[14px] bg-white p-6 shadow-[0_0_10px_0_rgba(15,15,15,0.04)]"
-            >
-              <div className="flex items-center justify-between">
-                <div className="text-[16px] font-normal text-[#00B1A6]">할 일 정보</div>
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="grid h-6 w-6 place-items-center rounded-md text-[#767676] hover:bg-black/5 active:bg-black/10"
-                  aria-label="close"
-                >
-                  <span className="text-[18px] leading-none">×</span>
-                </button>
-              </div>
-
-              {/* 날짜 + 시간 범위 */}
-              <div className="mt-4 text-center text-[14px] font-semibold text-[#767676]">{modalDateText}</div>
-              <div className="mt-2 text-center font-pretendard text-[28px] font-semibold leading-normal text-[#2C2C2C]">
-                {modalTimeText}
-              </div>
-
-              <div className="mt-6 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-[14px] font-normal text-[#767676]">이름</div>
-                  <button
-                    type="button"
-                    onClick={goEditStep1}
-                    className="group flex items-center gap-2 rounded-md px-2 py-1 text-right text-[14px] font-semibold text-gray-700 hover:bg-black/5 active:bg-black/10"
-                  >
-                    <span className="max-w-55 truncate">{openTask.title}</span>
-                    <NextDarkSvg className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="text-[14px] font-normal text-[#767676]">예상 소요 시간</div>
-                  <button
-                    type="button"
-                    onClick={goEditStep1}
-                    className="group flex items-center gap-2 rounded-md px-2 py-1 text-right text-[14px] font-semibold text-gray-700 hover:bg-black/5 active:bg-black/10"
-                  >
-                    <span>{formatDuration(openTask.durationMinutes)}</span>
-                    <NextDarkSvg className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="text-[14px] font-normal text-[#767676]">중요도</div>
-                  <button
-                    type="button"
-                    onClick={goEditStep2}
-                    className="group flex items-center gap-2 rounded-md px-2 py-1 text-right text-[14px] font-semibold text-gray-700 hover:bg-black/5 active:bg-black/10"
-                  >
-                    <span>{openTask.priority}</span>
-                    <NextDarkSvg className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="mt-6 flex gap-3">
-                <button
-                  type="button"
-                  onClick={removeFromModal}
-                  className={[
-                    "flex h-10.5 w-22 items-center justify-center rounded-md border border-[#C2C2C2] bg-white text-[14px] font-semibold text-[#3A3A3A]",
-                    "hover:bg-red-100 hover:text-red-600 active:bg-red-200",
-                  ].join(" ")}
-                >
-                  삭제
-                </button>
-
-                <button
-                  type="button"
-                  onClick={toggleDoneFromModal}
-                  className={[
-                    "h-10.5 flex-1 rounded-md bg-[#F1F1F1] text-[14px] font-semibold text-[#767676]",
-                    openTask.isDone
-                      ? "hover:bg-gray-200 hover:text-gray-700 active:bg-gray-300"
-                      : "hover:bg-green-100 hover:text-green-700 active:bg-green-200",
-                  ].join(" ")}
-                >
-                  {openTask.isDone ? "완료 취소하기" : "할 일 완료하기"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/*할 일 정보 모달*/}
+        <TaskInfoModal
+          open={Boolean(openTask)}
+          title={openTask?.title ?? ""}
+          durationText={openTask ? formatDuration(openTask.durationMinutes) : ""}
+          priorityText={openTask?.priority ?? ""}
+          isDone={Boolean(openTask?.isDone)}
+          modalDateText={modalDateText}
+          modalTimeText={modalTimeText}
+          onClose={closeModal}
+          onEditStep1={goEditStep1}
+          onEditStep2={goEditStep2}
+          onDelete={removeFromModal}
+          onToggleDone={toggleDoneFromModal}
+        />
 
         <ConfirmModal
           open={deleteConfirmOpen}
