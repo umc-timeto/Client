@@ -86,6 +86,8 @@ async function deleteGoalApi(goalId: number) {
 
 //========================
 //STEP 1: 폴더 Row(드래그 핸들만 드래그 가능)
+//- ✅ 드래그 핸들(MenuSvg)을 오른쪽으로 이동(가로폭 변해도 우측 고정)
+//- ✅ 오른쪽 여백 div(h-18 w-7) 유지
 //========================
 function SortableFolderRow(props: {
   goalId: string;
@@ -123,21 +125,8 @@ function SortableFolderRow(props: {
         if (e.key === "Enter") onClick();
       }}
     >
-        {/*폴더 Row:왼쪽 영역(핸들 + 텍스트)*/}
-        <div className="flex min-w-0 flex-1 items-center gap-2.75 pt-3.75 -mt-3.75">
-          {/*드래그 핸들:모바일 터치 드래그 시작 지점*/}
-          <div
-            className="inline-flex h-6.75 w-6.75 items-center justify-center touch-none select-none cursor-grab active:cursor-grabbing"
-            {...attributes}
-            {...listeners}
-            onClick={(e) => {
-              e.stopPropagation();
-            }}
-          >
-            <MenuSvg className="h-4 w-4" />
-          </div>
-
-
+      {/*폴더 Row:왼쪽 영역(텍스트)*/}
+      <div className="flex min-w-0 flex-1 items-center gap-2.75 pt-3.75 -mt-3.75">
         {/*폴더 텍스트:이름 + 할 일 개수*/}
         <div className="min-w-0 flex-1">
           <div className="text-left truncate text-[15px] font-semibold leading-[150%] text-[#3A3A3A]">
@@ -147,10 +136,20 @@ function SortableFolderRow(props: {
             {`할 일 ${folder.todoCount ?? 0}개`}
           </div>
         </div>
-      </div>
 
-      {/*오른쪽 여백:디자인 유지용*/}
-      <div className="h-18 w-7" />
+        {/*드래그 핸들:모바일 터치 드래그 시작 지점(✅ 오른쪽 고정)*/}
+        <div
+          className="inline-flex h-6.75 w-6.75 shrink-0 items-center justify-center touch-none select-none cursor-grab active:cursor-grabbing"
+          {...attributes}
+          {...listeners}
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
+        >
+          <MenuSvg className="h-4 w-4" />
+        </div>
+      </div>
+      <div className="h-18" />
     </div>
   );
 }

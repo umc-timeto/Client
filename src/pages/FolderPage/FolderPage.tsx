@@ -77,7 +77,6 @@ function SortableTaskRow(props: {
     data: { section },
   });
 
-  //드래그 중 "슉슉" 이동 효과
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -87,6 +86,7 @@ function SortableTaskRow(props: {
   const rowHover = isDone
     ? "hover:bg-yellow-light-hover active:bg-yellow-light-active"
     : "hover:bg-green-light-hover active:bg-green-light-active";
+
   const titleClass = isDone
     ? "truncate text-[15px] font-semibold leading-[150%] text-[#B0B0B0] line-through"
     : "truncate text-[15px] font-semibold leading-[150%] text-[#2C2C2C]";
@@ -99,7 +99,11 @@ function SortableTaskRow(props: {
     <div
       ref={setNodeRef}
       style={style}
-      className={["flex w-full items-center justify-between px-4 py-6 text-left", rowHover, isDragging ? "opacity-70" : ""].join(" ")}
+      className={[
+        "flex w-full items-center justify-between px-4 py-6 text-left",
+        rowHover,
+        isDragging ? "opacity-70" : "",
+      ].join(" ")}
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -107,9 +111,36 @@ function SortableTaskRow(props: {
         if (e.key === "Enter") onClick();
       }}
     >
-      {/*왼쪽(핸들 + 텍스트)*/}
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        {/*드래그 핸들*/}
+      {/* ✅ 왼쪽: 텍스트만 */}
+      <div className="min-w-0 flex-1">
+        <div className={titleClass}>{task.title}</div>
+
+        {task._startAt ? (
+          <div className="mt-1 font-pretendard text-[13px] font-normal leading-[150%] text-[#00857D]">
+            {formatMMDD_DOW(task._startAt)}
+          </div>
+        ) : null}
+      </div>
+
+      {/* ✅ 오른쪽: 뱃지 + (맨 끝) 드래그핸들 */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <span
+            className="flex h-5.5 w-5.5 items-center justify-center rounded-xs text-[12px] font-semibold leading-[120%] text-white"
+            style={{ background: badgeBg }}
+          >
+            {task.priority}
+          </span>
+
+          <span
+            className="flex h-5.5 w-13 items-center justify-center rounded-[3px] border text-[12px] font-semibold"
+            style={{ borderColor: badgeBorder, color: badgeText }}
+          >
+            {formatDuration(task.durationMinutes)}
+          </span>
+        </div>
+
+        {/* ✅ 드래그 핸들: 오른쪽 끝 고정 */}
         <div
           className="touch-none select-none cursor-grab active:cursor-grabbing"
           {...attributes}
@@ -120,34 +151,6 @@ function SortableTaskRow(props: {
         >
           {isDone ? <MenuYellowSvg className="h-[11.25px] w-3" /> : <MenuGreenSvg className="h-[11.25px] w-3" />}
         </div>
-
-        <div className="min-w-0">
-          <div className={titleClass}>{task.title}</div>
-
-          {/*startAt 있을 때만 날짜 표시*/}
-          {task._startAt ? (
-            <div className="mt-1 font-pretendard text-[13px] font-normal leading-[150%] text-[#00857D]">
-              {formatMMDD_DOW(task._startAt)}
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      {/*오른쪽(중요도 + 소요시간)*/}
-      <div className="flex items-center gap-2">
-        <span
-          className="flex h-5.5 w-5.5 items-center justify-center rounded-xs text-[12px] font-semibold leading-[120%] text-white"
-          style={{ background: badgeBg }}
-        >
-          {task.priority}
-        </span>
-
-        <span
-          className="flex h-5.5 w-13 items-center justify-center rounded-[3px] border text-[12px] font-semibold"
-          style={{ borderColor: badgeBorder, color: badgeText }}
-        >
-          {formatDuration(task.durationMinutes)}
-        </span>
       </div>
     </div>
   );
