@@ -1,9 +1,10 @@
 import CalendarMonth from "@/pages/TimeBlockPage/components/CalendarMonth";
 import ConfirmModal from "@/components/ConfirmModal";
+import TaskInfoModalContainer from "@/components/TaskInfoModalContainer";
 import CalendarWeekStrip from "@/pages/TimeBlockPage/components/CalendarWeekStrip";
 import useCalendarModel from "@/hooks/TimeBlockPage/useCalendarModel";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
@@ -55,7 +56,6 @@ const parseYmd = (ymd: string) => {
 };
 
 const formatLocalStartAt = (d: Date) => {
-  // server expects e.g. "2026-02-16T14:00" (no seconds)
   const y = d.getFullYear();
   const m = pad2(d.getMonth() + 1);
   const day = pad2(d.getDate());
@@ -216,7 +216,7 @@ const computeLayoutsForDay = (args: {
 
   const makeLayout = (it: BlockItem, lane: 0 | 1, cols: 1 | 2): BlockLayout => {
     const topPx = (it.startAdj - START_MIN) * PX_PER_MIN;
-    const heightPx = Math.max(18, (it.endAdj - it.startAdj) * PX_PER_MIN);
+    const heightPx = Math.max(28, (it.endAdj - it.startAdj) * PX_PER_MIN);
     return {
       blockId: String(it.b.blockId),
       todoId: it.b.todoId,
@@ -338,6 +338,7 @@ function TimeBlockItem(props: {
   idx: number;
   done: boolean;
   onToggle: () => void;
+  onOpenDetail: () => void;
   draggable: {
     listeners?: Record<string, unknown>;
     attributes?: Record<string, unknown>;
@@ -346,7 +347,7 @@ function TimeBlockItem(props: {
     isDragging: boolean;
   };
 }) {
-  const { layout, idx, done, onToggle, draggable } = props;
+  const { layout, idx, done, onToggle, onOpenDetail, draggable } = props;
   const { blockId, topPx, heightPx, lane, cols, task, folder, colorKey } = layout;
 
   const baseStyle = blockPositionStyle({
@@ -375,20 +376,27 @@ function TimeBlockItem(props: {
         cols === 2 && lane === 1 ? "border border-white" : ""
       }`}
       style={style}
-      onClick={onToggle}
+      onClick={() => {
+  onOpenDetail();
+}}
       {...(draggable.attributes as any)}
       {...(draggable.listeners as any)}
     >
       <div className={`relative flex h-full w-full ${cols > 1 ? "px-3" : "px-4"}`}>
         <div className="flex h-full w-full min-w-0 items-center">
           <div className="flex w-full min-w-0 items-center gap-2">
-            <span
-              className="shrink-0 h-3 w-3 rounded-[3px] border"
+            <button
+              type="button"
+              className="shrink-0 h-3 w-3 rounded-[3px] border flex items-center justify-center"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggle();
+              }}
               style={{
                 borderColor: colorVar(colorKey, "nomal"),
                 backgroundColor: done ? colorVar(colorKey, "nomal") : "transparent",
               }}
-              aria-hidden
+              aria-label="toggle complete"
             />
 
             <div className="flex min-w-0 flex-1 items-center gap-2 whitespace-nowrap">
@@ -430,8 +438,9 @@ function DraggableTimeBlockItem(props: {
   idx: number;
   done: boolean;
   onToggle: () => void;
+  onOpenDetail: () => void;
 }) {
-  const { layout, idx, done, onToggle } = props;
+  const { layout, idx, done, onToggle, onOpenDetail } = props;
   const { setNodeRef, listeners, attributes, transform, isDragging } = useDraggable({
     id: layout.blockId,
   });
@@ -442,6 +451,7 @@ function DraggableTimeBlockItem(props: {
       idx={idx}
       done={done}
       onToggle={onToggle}
+      onOpenDetail={onOpenDetail}
       draggable={{
         setNodeRef,
         listeners,
@@ -458,7 +468,9 @@ export default function TimeBlockPage() {
 
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Local selected date state that updates immediately on pick
+  const location = useLocation();
+
+  
   const defaultTodayStr = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
   const [selectedDateStr, setSelectedDateStr] = useState(() => searchParams.get("date") ?? defaultTodayStr);
 
@@ -477,35 +489,74 @@ export default function TimeBlockPage() {
     blockId: number | string;
     startAt: string;
   } | null>(null);
+  const [openTaskId, setOpenTaskId] = useState<number | null>(null);
 
   const queryClient = useQueryClient();
 
+  
+  useEffect(() => {
+    const invalidateAll = () => {
+      queryClient.invalidateQueries({
+        queryKey: ["timeblocks"],
+        exact: false,
+      });
+    };
+
+    
+    invalidateAll();
+
+    
+    const onFocus = () => invalidateAll();
+
+    
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        invalidateAll();
+      }
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [queryClient, location.key]);
+
+  const pendingStatusBlockIdsRef = useRef<Set<string>>(new Set());
+
   const toggleTodoStatusMutation = useMutation({
-    mutationFn: async (vars: { todoId: number; state: TodoStatusState }) => {
+    mutationFn: async (vars: { blockId: string; todoId: number; state: TodoStatusState }) => {
       return todoStatusApi.updateTodoStatus(vars.todoId, { state: vars.state });
     },
     onMutate: async (vars) => {
-      await queryClient.cancelQueries({ queryKey: ["timeblocks", "day", selectedDateStr] });
+      
+      pendingStatusBlockIdsRef.current.add(String(vars.blockId));
+
+      await queryClient.cancelQueries({ queryKey: ["timeblocks", selectedDateStr] });
       return { vars };
     },
     onError: (_err, vars) => {
+      
       setDoneIds((prev) => {
         const next = { ...prev };
-        for (const l of layoutsForDay) {
-          if (l.todoId === vars.todoId) {
-            const serverDone = l.state === "complete";
-            next[l.blockId] = serverDone;
-          }
+        const l = layoutsForDay.find((x) => x.todoId === vars.todoId);
+        if (l) {
+          next[String(l.blockId)] = l.state === "complete";
         }
         return next;
       });
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["timeblocks", "day", selectedDateStr] });
+    onSettled: (_data, _err, vars) => {
+      pendingStatusBlockIdsRef.current.delete(String(vars.blockId));
+
+      
+      queryClient.invalidateQueries({ queryKey: ["timeblocks"], exact: false });
     },
   });
 
-  // const selectedDateStr = searchParams.get("date") ?? `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
+  
 
   useEffect(() => {
     sessionStorage.setItem("timetto_timeblock_date", selectedDateStr);
@@ -533,7 +584,12 @@ export default function TimeBlockPage() {
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["timeblocks", "day", selectedDateStr] });
+      
+      
+      queryClient.invalidateQueries({
+        queryKey: ["timeblocks"],
+        exact: false,
+      });
     },
   });
 
@@ -548,7 +604,7 @@ const pickDate = (dateStr: string) => {
   const v = String(dateStr ?? "").trim();
   if (!v) return;
 
-  // keep local date in sync immediately (prevents stale date being used by downstream navigation)
+  
   setSelectedDateStr(v);
 
   setSearchParams(
@@ -563,13 +619,20 @@ const pickDate = (dateStr: string) => {
   );
 };
 
-  const { data: blocksForDay = [] } = useQuery({
-    queryKey: ["timeblocks", "day", selectedDateStr],
-    queryFn: () => timeBlockDayApi.getTimeBlocksByDay(selectedDateStr),
-    staleTime: 0,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
-  });
+const {
+  data: blocksForDay = [],
+  refetch,
+} = useQuery({
+  queryKey: ["timeblocks", selectedDateStr],
+  queryFn: () => timeBlockDayApi.getTimeBlocksByDay(selectedDateStr),
+  staleTime: 0,
+  gcTime: 0,
+  refetchOnMount: "always",
+  refetchOnWindowFocus: true,
+  refetchOnReconnect: true,
+});
+
+
 
   const layoutsForDay = useMemo(() => {
     return computeLayoutsForDay({
@@ -582,7 +645,7 @@ const pickDate = (dateStr: string) => {
     });
   }, [blocksForDay, selectedDateStr, START_MIN, PX_PER_MIN]);
 
-  // Helper: add days to ymd string
+  
   const addDaysToYmd = (ymd: string, offset: number) => {
     const p = parseYmd(ymd);
     if (!p) return ymd;
@@ -602,7 +665,7 @@ const pickDate = (dateStr: string) => {
       const deltaMinRaw = e.delta?.y ? e.delta.y / PX_PER_MIN : 0;
       if (!Number.isFinite(deltaMinRaw) || Math.abs(deltaMinRaw) < 0.5) return;
 
-      // snap to 5 minutes
+      
       const snap = 5;
       const deltaMin = Math.round(deltaMinRaw / snap) * snap;
 
@@ -612,10 +675,10 @@ const pickDate = (dateStr: string) => {
 
       const nextStartAdj = Math.min(maxStart, Math.max(minStart, layout.startAdj + deltaMin));
 
-      // detect horizontal drag for date move (desktop support)
+      
       const deltaX = e.delta?.x ?? 0;
 
-      // 200px ≈ 1 day threshold (tweakable)
+      
       const dayOffset = Math.round(deltaX / 200);
 
       const targetDateStr =
@@ -626,8 +689,69 @@ const pickDate = (dateStr: string) => {
 
       const nextEndDt = new Date(nextStartDt.getTime() + durationMin * 60000);
 
-      // if moved to another day, update selected date immediately
-      if (dayOffset !== 0) {
+      const sourceDateStr = selectedDateStr;
+      const movedAcrossDay = dayOffset !== 0;
+
+      
+      
+      
+      const nextStartAtStr = formatLocalStartAt(nextStartDt) + ":00";
+      const nextEndAtStr = formatLocalStartAt(nextEndDt) + ":00";
+
+      if (!movedAcrossDay) {
+        queryClient.setQueryData<BlockDayItem[]>(["timeblocks", sourceDateStr], (prev) => {
+          const arr = Array.isArray(prev) ? prev : [];
+          return arr.map((b) => {
+            if (String(b.blockId) !== activeId) return b;
+            return {
+              ...b,
+              startAt: nextStartAtStr,
+              endAt: nextEndAtStr,
+            };
+          });
+        });
+      } else {
+        
+        queryClient.setQueryData<BlockDayItem[]>(["timeblocks", sourceDateStr], (prev) => {
+          const arr = Array.isArray(prev) ? prev : [];
+          return arr.filter((b) => String(b.blockId) !== activeId);
+        });
+
+        
+        queryClient.setQueryData<BlockDayItem[]>(["timeblocks", targetDateStr], (prev) => {
+          const arr = Array.isArray(prev) ? prev : [];
+
+          
+          const fromSource = blocksForDay.find((b) => String(b.blockId) === activeId);
+
+          const base: BlockDayItem = fromSource
+            ? {
+                ...fromSource,
+                startAt: nextStartAtStr,
+                endAt: nextEndAtStr,
+              }
+            : {
+                blockId: Number(activeId),
+                todoId: layout.todoId,
+                startAt: nextStartAtStr,
+                endAt: nextEndAtStr,
+                todoName: layout.task.title,
+                priority: "MEDIUM",
+                state: layout.state,
+                goalName: layout.folder?.title,
+              };
+
+          const exists = arr.some((b) => String(b.blockId) === activeId);
+          const nextArr = exists
+            ? arr.map((b) => (String(b.blockId) === activeId ? base : b))
+            : [...arr, base];
+
+          
+          nextArr.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+          return nextArr;
+        });
+
+        
         setSelectedDateStr(targetDateStr);
         setSearchParams(
           (prev) => {
@@ -639,38 +763,50 @@ const pickDate = (dateStr: string) => {
           },
           { replace: true }
         );
+
+        
+        queryClient.invalidateQueries({ queryKey: ["timeblocks", targetDateStr] });
+        queryClient.invalidateQueries({ queryKey: ["timeblocks", sourceDateStr] });
       }
 
-      // update the cached day list immediately so UI follows drag
-      queryClient.setQueryData<BlockDayItem[]>(["timeblocks", "day", selectedDateStr], (prev) => {
-        const arr = Array.isArray(prev) ? prev : [];
-        return arr.map((b) => {
-          if (String(b.blockId) !== activeId) return b;
-          return {
-            ...b,
-            startAt: formatLocalStartAt(nextStartDt) + ":00",
-            endAt: formatLocalStartAt(nextEndDt) + ":00",
-          };
-        });
-      });
-
-      // best-effort persist (server policy may still adjust)
+      
       moveBlockMutation.mutate({
         blockId: layout.blockId,
         startAt: formatLocalStartAt(nextStartDt),
       });
     },
-    [PX_PER_MIN, START_MIN, layoutsForDay, queryClient, selectedDateStr, moveBlockMutation]
+    [
+      PX_PER_MIN,
+      START_MIN,
+      layoutsForDay,
+      queryClient,
+      selectedDateStr,
+      moveBlockMutation,
+      setSearchParams,
+      blocksForDay,
+    ]
   );
 
   useEffect(() => {
     setDoneIds((prev) => {
-      const next = { ...prev };
+      const next: Record<string, boolean> = { ...prev };
+
       for (const l of layoutsForDay) {
-        if (next[l.blockId] === undefined) {
-          next[l.blockId] = l.state === "complete";
-        }
+        const key = String(l.blockId);
+
+        
+        if (pendingStatusBlockIdsRef.current.has(key)) continue;
+
+        
+        next[key] = l.state === "complete";
       }
+
+      
+      const existing = new Set(layoutsForDay.map((l) => String(l.blockId)));
+      for (const k of Object.keys(next)) {
+        if (!existing.has(k)) delete next[k];
+      }
+
       return next;
     });
   }, [layoutsForDay]);
@@ -738,22 +874,25 @@ const pickDate = (dateStr: string) => {
               <div className="absolute left-0 right-0 top-0 z-0">
                 {(layoutsForDay ?? []).map((layout, idx) => (
                   <DraggableTimeBlockItem
-                    key={layout.blockId}
-                    layout={layout}
-                    idx={idx}
-                    done={Boolean(doneIds[layout.blockId] ?? (layout.state === "complete"))}
-                    onToggle={() => {
-                      const currentDone = Boolean(doneIds[layout.blockId] ?? (layout.state === "complete"));
-                      const nextState: TodoStatusState = currentDone ? "progress" : "complete";
+  key={layout.blockId}
+  layout={layout}
+  idx={idx}
+  done={Boolean(doneIds[layout.blockId] ?? (layout.state === "complete"))}
+  onToggle={() => {
+    const currentDone = Boolean(doneIds[layout.blockId] ?? (layout.state === "complete"));
+    const nextState: TodoStatusState = currentDone ? "progress" : "complete";
 
-                      setDoneIds((prev) => ({
-                        ...prev,
-                        [layout.blockId]: !currentDone,
-                      }));
+    setDoneIds((prev) => ({
+      ...prev,
+      [layout.blockId]: !currentDone,
+    }));
 
-                      toggleTodoStatusMutation.mutate({ todoId: layout.todoId, state: nextState });
-                    }}
-                  />
+    toggleTodoStatusMutation.mutate({ blockId: String(layout.blockId), todoId: layout.todoId, state: nextState });
+  }}
+  onOpenDetail={() => {
+    setOpenTaskId(layout.todoId);
+  }}
+/>
                 ))}
               </div>
             </DndContext>
@@ -776,6 +915,23 @@ const pickDate = (dateStr: string) => {
           }
           setConfirmOpen(false);
           setPendingAutoAppend(null);
+        }}
+      />
+      <TaskInfoModalContainer
+        open={openTaskId !== null}
+        todoId={openTaskId}
+        onClose={() => setOpenTaskId(null)}
+        onEditStep1={() => {}}
+        onEditStep2={() => {}}
+        onChanged={() => {
+          
+          queryClient.invalidateQueries({
+            queryKey: ["timeblocks"],
+            exact: false,
+          });
+
+          
+          setDoneIds({});
         }}
       />
     </div>
