@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useTimeBlockCreateStore } from "@/constants/timeBlockCreateStore";
@@ -11,11 +11,11 @@ import ConfirmModal from "@/components/ConfirmModal";
 import { taskApi } from "@/apis/TimeBlockPage/task";
 import { todoApi } from "@/apis/TimeBlockPage/todo";
 import { timeBlockSaveApi } from "@/apis/TimeBlockPage/timeBlockSave";
+import { timeBlockDayApi } from "@/apis/TimeBlockPage/timeBlockDay";
 
 const levelLabelMap: Record<string, string> = { high: "상", mid: "중", low: "하" };
 
 type TodoState = "progress" | "complete";
-
 type TodoPriority = "HIGH" | "MEDIUM" | "LOW";
 
 type UnblockedTodoItem = {
@@ -61,7 +61,6 @@ const durationToMinutes = (duration?: string): number | undefined => {
 const colorVar = (key: ColorKey, tone: "nomal" | "light") => `var(--color-folder-${key}-${tone})`;
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
-
 const isYmd = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
 
 const formatStartAt = (dateYmd: string, base: Date) => {
@@ -71,27 +70,9 @@ const formatStartAt = (dateYmd: string, base: Date) => {
   return `${ymd}T${pad2(base.getHours())}:${pad2(base.getMinutes())}:00`;
 };
 
-const addMinutes = (startAt: string, minutes: number) => {
-  const m = startAt.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
-  if (!m) return startAt;
-
-  const y = Number(m[1]);
-  const mo = Number(m[2]) - 1;
-  const d = Number(m[3]);
-  const hh = Number(m[4]);
-  const mm = Number(m[5]);
-  const ss = m[6] ? Number(m[6]) : 0;
-
-  const dt = new Date(y, mo, d, hh, mm, ss);
-  if (Number.isNaN(dt.getTime())) return startAt;
-
-  dt.setMinutes(dt.getMinutes() + minutes);
-
-  return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}T${pad2(dt.getHours())}:${pad2(dt.getMinutes())}:00`;
-};
-
 export default function TimeBlockCreateTaskPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
 
   const pickedGoal = useTimeBlockCreateStore((s) => s.pickedGoal);
@@ -100,12 +81,18 @@ export default function TimeBlockCreateTaskPage() {
   const setTask = useTimeBlockCreateStore((s) => s.setTask);
 
   const [saving, setSaving] = useState(false);
-  const [conflictOpen, setConflictOpen] = useState(false);
-  const [pendingStartAt, setPendingStartAt] = useState<string | null>(null);
+
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingSave, setPendingSave] = useState<{ todoId: number; startAt: string } | null>(null);
 
   const dateYmd = (() => {
-    const d = searchParams.get("date") ?? searchParams.get("w") ?? sessionStorage.getItem("timetto_timeblock_date") ?? "";
+    const d =
+      searchParams.get("date") ??
+      searchParams.get("w") ??
+      sessionStorage.getItem("timetto_timeblock_date") ??
+      "";
     if (isYmd(d)) return d;
+
     const now = new Date();
     return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
   })();
@@ -115,17 +102,21 @@ export default function TimeBlockCreateTaskPage() {
   const folderId = useMemo(() => {
     if (!pickedFolder) return null;
 
-    const pf = pickedFolder as unknown as {
-      id?: string | number;
-      folderId?: string | number;
-    };
-
+    const pf = pickedFolder as unknown as { id?: string | number; folderId?: string | number };
     const v = pf.folderId ?? pf.id;
     if (v === null || v === undefined) return null;
 
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }, [pickedFolder]);
+
+  const { data: blocksForSelectedDay = [] } = useQuery({
+    queryKey: ["timeblocks", "day", dateYmd],
+    queryFn: () => timeBlockDayApi.getTimeBlocksByDay(dateYmd),
+    staleTime: 30_000,
+    enabled: Boolean(dateYmd),
+  });
+  const hasAnyBlockInSelectedDay = (blocksForSelectedDay ?? []).length > 0;
 
   const { data: unblockedTodos = [], isLoading } = useQuery({
     queryKey: ["todos", "unblocked", "withDetail", folderId],
@@ -152,12 +143,10 @@ export default function TimeBlockCreateTaskPage() {
         })
       );
 
-      const visible = merged.filter((t) => {
+      return merged.filter((t) => {
         const s = (t as UnblockedTodoItem).startAt;
         return s === null || s === undefined || String(s).trim() === "";
       });
-
-      return visible;
     },
     enabled: folderId !== null,
     staleTime: 30_000,
@@ -184,38 +173,16 @@ export default function TimeBlockCreateTaskPage() {
     });
   }, [unblockedTodos, pickedGoal, folderId]);
 
-  const getHttpStatus = (error: unknown) =>
-    (error as any)?.response?.status ?? (error as any)?.status;
-
-  const trySave = async (todoId: number, startAt: string): Promise<"ok" | "conflict" | "error"> => {
+  const trySave = async (todoId: number, startAt: string): Promise<"ok" | "error"> => {
     setSaving(true);
     try {
       await timeBlockSaveApi.saveTimeBlock(todoId, { startAt });
       return "ok";
-    } catch (e) {
-      const status = getHttpStatus(e);
-      // if (status === 409) return "conflict";
-      // 만약 400 충돌로 간주 안하려면 위 코드 활성화
-      if (status === 409 || status === 400 ) return "conflict";
+    } catch {
       return "error";
     } finally {
       setSaving(false);
     }
-  };
-
-  const saveWithAutoShift = async (todoId: number, startAt: string, stepMinutes: number) => {
-    const step = Number.isFinite(stepMinutes) && stepMinutes > 0 ? stepMinutes : 1;
-    const maxTries = 24 * 60; 
-    let cur = startAt;
-
-    for (let i = 0; i < maxTries; i += 1) {
-      const r = await trySave(todoId, cur);
-      if (r === "ok") return { ok: true as const, startAt: cur };
-      if (r === "error") return { ok: false as const };
-      cur = addMinutes(cur, step);
-    }
-
-    return { ok: false as const };
   };
 
   useEffect(() => {
@@ -227,21 +194,22 @@ export default function TimeBlockCreateTaskPage() {
 
       const startAt = formatStartAt(dateYmd, new Date());
 
-      const r = await trySave(todoId, startAt);
-      if (r === "ok") {
-        navigate(`/timeblock?date=${encodeURIComponent(dateYmd)}`, { replace: true });
+      if (hasAnyBlockInSelectedDay) {
+        setPendingSave({ todoId, startAt });
+        setConfirmOpen(true);
         return;
       }
 
-      if (r === "conflict") {
-        setPendingStartAt(startAt);
-        setConflictOpen(true);
+      const r = await trySave(todoId, startAt);
+      if (r === "ok") {
+        queryClient.invalidateQueries({ queryKey: ["timeblocks", "day", dateYmd] });
+        navigate(`/timeblock?date=${encodeURIComponent(dateYmd)}`, { replace: true });
       }
     };
 
     window.addEventListener("timeblockCreate:save", handler as EventListener);
     return () => window.removeEventListener("timeblockCreate:save", handler as EventListener);
-  }, [pickedTask, dateYmd, navigate]);
+  }, [pickedTask, dateYmd, navigate, hasAnyBlockInSelectedDay, queryClient]);
 
   if (!pickedGoal) return <Navigate to={`/timeblock/create/goal${dateQuery}`} replace />;
   if (!pickedFolder) return <Navigate to={`/timeblock/create/folder${dateQuery}`} replace />;
@@ -261,24 +229,22 @@ export default function TimeBlockCreateTaskPage() {
     (pickedFolder as unknown as { title?: string; name?: string }).name ??
     "";
 
-  const closeConflict = () => {
-    setConflictOpen(false);
-    setPendingStartAt(null);
+  const closeConfirm = () => {
+    setConfirmOpen(false);
+    setPendingSave(null);
   };
 
-  const confirmConflict = async () => {
-    if (!pickedTask || !pendingStartAt) return;
+  const confirmAutoAppend = async () => {
+    if (!pendingSave) return;
 
-    const todoId = (pickedTask as any)?.todoId ?? Number((pickedTask as any)?.id);
-    if (!Number.isFinite(todoId)) return;
+    const { todoId, startAt } = pendingSave;
 
-    setConflictOpen(false);
-    setPendingStartAt(null);
+    setConfirmOpen(false);
+    setPendingSave(null);
 
-    const stepMinutes = 1;
-
-    const result = await saveWithAutoShift(todoId, pendingStartAt, stepMinutes);
-    if (result.ok) {
+    const r = await trySave(todoId, startAt);
+    if (r === "ok") {
+      queryClient.invalidateQueries({ queryKey: ["timeblocks", "day", dateYmd] });
       navigate(`/timeblock?date=${encodeURIComponent(dateYmd)}`, { replace: true });
     }
   };
@@ -333,12 +299,12 @@ export default function TimeBlockCreateTaskPage() {
       </div>
 
       <ConfirmModal
-        open={conflictOpen}
+        open={confirmOpen}
         title="선택한 시간에 다른 할 일이 있어요"
         cancelText="취소"
         confirmText="확인"
-        onCancel={closeConflict}
-        onConfirm={confirmConflict}
+        onCancel={closeConfirm}
+        onConfirm={confirmAutoAppend}
         variant="timeblockConflict"
       />
     </>

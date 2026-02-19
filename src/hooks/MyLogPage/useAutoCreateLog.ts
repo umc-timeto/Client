@@ -7,6 +7,7 @@ type UseAutoCreateLogArgs = {
   answer1?: Satisfaction | null;
   answer2?: Achievement | null;
   answer3?: string | null;
+  date?: string;
   debounceMs?: number;
   enabled?: boolean;
   onSuccess?: (logId: number | null) => void;
@@ -17,6 +18,7 @@ export function useAutoCreateLog({
   answer1,
   answer2,
   answer3,
+  date,
   debounceMs = 500,
   enabled = true,
   onSuccess,
@@ -25,7 +27,7 @@ export function useAutoCreateLog({
   const timerRef = useRef<number | null>(null);
   const lastSentKeyRef = useRef<string>("");
 
-  const canSend = Boolean(answer1 && answer2 && (answer3 ?? "").trim().length > 0);
+  const canSend = Boolean(answer1 && answer2);
 
   const body: CreateLogRequest | null = useMemo(() => {
     if (!canSend) return null;
@@ -33,23 +35,34 @@ export function useAutoCreateLog({
       answer1: answer1 as Satisfaction,
       answer2: answer2 as Achievement,
       answer3: (answer3 ?? "").trim(),
+      date: date as string,
     };
-  }, [answer1, answer2, answer3, canSend]);
+  }, [answer1, answer2, answer3, date, canSend]);
 
   const mutation = useMutation<CreateLogResponse, unknown, CreateLogRequest>({
     mutationFn: (req: CreateLogRequest) => logsApi.createLog(req),
     onSuccess: (payload) => {
+      console.log("[useAutoCreateLog] createLog payload", payload);
+
+      const directId = (payload as any)?.logId;
+      const nestedId = (payload as any)?.data?.logId;
+      const nestedIdAlt = (payload as any)?.data?.id;
+
       const candidate =
-        (payload as any)?.data?.logId ??
-        (payload as any)?.data?.id ??
-        (payload as any)?.logId ??
-        (payload as any)?.id ??
-        null;
+        typeof directId === "number"
+          ? directId
+          : typeof nestedId === "number"
+          ? nestedId
+          : typeof nestedIdAlt === "number"
+          ? nestedIdAlt
+          : null;
 
       const logId =
         typeof candidate === "number" && Number.isFinite(candidate) && candidate > 0
           ? candidate
           : null;
+
+      console.log("[useAutoCreateLog] extracted logId", logId);
 
       onSuccess?.(logId);
     },

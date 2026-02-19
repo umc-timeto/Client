@@ -45,7 +45,7 @@ export function StatusHeaderBase({ title, left, right }: HeaderBaseProps) {
           {title}
         </h1>
 
-        <div className="flex flex-none items-center justify-end" aria-label="header-right">
+        <div className="flex flex-none items-center justify-end mr-1.5" aria-label="header-right">
           {right}
         </div>
       </div>

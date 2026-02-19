@@ -51,12 +51,30 @@ export default function MyLogPage() {
     setSearchParams,
   });
 
-  const { data: monthlyLogs = [] } = useQuery({
+  const { data: monthlyLogsResponse } = useQuery({
     queryKey: ["logs", "monthly", year, month],
     queryFn: () => monthlyLogsApi.getMonthlyLogs({ year, month }),
     enabled: Number.isFinite(year) && Number.isFinite(month) && month >= 1 && month <= 12,
     staleTime: 30_000,
   });
+
+  const monthlyLogs = useMemo(() => {
+    if (!monthlyLogsResponse) return [];
+
+    if (Array.isArray(monthlyLogsResponse)) {
+      return monthlyLogsResponse;
+    }
+
+    if (
+      typeof monthlyLogsResponse === "object" &&
+      "data" in monthlyLogsResponse &&
+      Array.isArray((monthlyLogsResponse as any).data)
+    ) {
+      return (monthlyLogsResponse as any).data;
+    }
+
+    return [];
+  }, [monthlyLogsResponse]);
 
   const moodByDate = useMemo<Record<string, Mood>>(() => {
     const out: Record<string, Mood> = {};
@@ -93,10 +111,6 @@ export default function MyLogPage() {
     if (!cell.inMonth) return;
 
     const ymd = toYmd(cell.date);
-    const todayYmd = toYmd(today);
-
-    if (ymd !== todayYmd) return;
-
     const logId = logIdByDate[ymd];
 
     const qs = new URLSearchParams();
@@ -145,10 +159,7 @@ export default function MyLogPage() {
           showSelection={false}
           onCellClick={handleCellClick}
           isCellDisabled={(cell) => {
-            if (!cell.inMonth) return true;
-            const ymd = toYmd(cell.date);
-            const todayYmd = toYmd(today);
-            return ymd !== todayYmd;
+            return !cell.inMonth;
           }}
         />
       </div>

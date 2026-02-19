@@ -11,15 +11,32 @@ export type TimeBlockSaveResponse = {
   data?: unknown;
 };
 
+const normalizeStartAt = (v: unknown): string => {
+  const raw = String(v ?? "").trim();
+  if (!raw) throw new Error("startAt is required");
+
+  const isoLike = raw.includes(" ") ? raw.replace(" ", "T") : raw;
+  if (isoLike.length >= 16) return isoLike.slice(0, 16);
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(isoLike)) return `${isoLike}T00:00`;
+
+  throw new Error("Invalid startAt format");
+};
+
 export const timeBlockSaveApi = {
-  async saveTimeBlock(todoId: number | string, body: TimeBlockSaveRequest): Promise<TimeBlockSaveResponse> {
-    const res = await api.patch<TimeBlockSaveResponse>(`/api/block/${todoId}`,
-      body,
-      {
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
+  async saveTimeBlock(
+    todoId: number | string,
+    body: TimeBlockSaveRequest
+  ): Promise<TimeBlockSaveResponse> {
+    const id = Number(todoId);
+    if (!Number.isFinite(id)) throw new Error("Invalid todoId");
+
+    const startAt = normalizeStartAt(body?.startAt);
+
+    const res = await api.patch<TimeBlockSaveResponse>(
+      `/api/block/${id}`,
+      { startAt },
+      { headers: { "Content-Type": "application/json" } }
     );
 
     const payload = res.data;

@@ -85,6 +85,12 @@ export default function SurveyPage() {
     return Number.isFinite(n) && n > 0 ? n : null;
   }, [logIdParam]);
 
+  const [currentLogId, setCurrentLogId] = useState<number | null>(logId);
+
+  useEffect(() => {
+    setCurrentLogId(logId);
+  }, [logId]);
+
   const date = useMemo(() => {
     const d = parseYmd(searchParams.get("date"));
     return d ?? new Date();
@@ -101,6 +107,12 @@ export default function SurveyPage() {
   const [text, setText] = useState<string>(initial.q3);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
+  const lastSyncedRef = useRef<{ a1: Satisfaction | null; a2: Achievement | null; a3: string } | null>(null);
+  const textPatchTimerRef = useRef<number | null>(null);
+  const suppressPatchRef = useRef(false);
+  const suppressAutoCreateRef = useRef(false);
+  const createdLogIdRef = useRef<number | null>(null);
+
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deleteLogApi.deleteLog(id),
     onSuccess: () => {
@@ -113,6 +125,11 @@ export default function SurveyPage() {
       next.delete("logid");
       next.delete("id");
       lastSyncedRef.current = null;
+      createdLogIdRef.current = null;
+      setCurrentLogId(null);
+      suppressAutoCreateRef.current = true;
+      setSingle({ q1: "", q2: "" });
+      setText("");
       navigate("/mylog", { replace: true });
     },
   });
@@ -137,15 +154,27 @@ export default function SurveyPage() {
     return null;
   }, [single.q2]);
 
-  const answer3 = useMemo(() => (text ?? "").trim(), [text]);
+  const answer3 = useMemo<string | null>(() => {
+    const v = (text ?? "").trim();
+    return v.length > 0 ? v : null;
+  }, [text]);
+
+  const dateStr = useMemo(() => toYmd(date), [date]);
 
   const { isPosting } = useAutoCreateLog({
     answer1,
     answer2,
     answer3,
+    date: dateStr,
     debounceMs: 500,
-    enabled: !logId,
+    enabled:
+      !confirmOpen &&
+      !deleteMutation.isPending &&
+      !suppressAutoCreateRef.current &&
+      !logId &&
+      (answer1 !== null || answer2 !== null),
     onSuccess: (createdLogId) => {
+      suppressAutoCreateRef.current = true;
       queryClient.invalidateQueries({ queryKey: ["logs", "monthly"] });
       if (createdLogId) {
         queryClient.invalidateQueries({ queryKey: ["logs", "detail", createdLogId] });
@@ -156,27 +185,32 @@ export default function SurveyPage() {
       const next = new URLSearchParams(searchParams);
       next.set("logId", String(createdLogId));
 
+      suppressAutoCreateRef.current = true;
+      if (createdLogId) {
+        createdLogIdRef.current = createdLogId;
+        setCurrentLogId(createdLogId);
+      }
+
       navigate({ pathname: "/mylog/survey", search: `?${next.toString()}` }, { replace: true });
     },
   });
 
   const { data: logDetail } = useLogDetail(logId ?? 0);
 
-  const lastSyncedRef = useRef<{ a1: Satisfaction | null; a2: Achievement | null; a3: string } | null>(null);
+useEffect(() => {
+  if (!logDetail) return;
 
-  useEffect(() => {
-    if (!logId) {
-      lastSyncedRef.current = null;
-      return;
-    }
-    if (!logDetail) return;
+  
+  if (!currentLogId && typeof logDetail.logId === "number") {
+    setCurrentLogId(logDetail.logId);
+  }
 
-    lastSyncedRef.current = {
-      a1: logDetail.answer1 ?? null,
-      a2: logDetail.answer2 ?? null,
-      a3: (logDetail.answer3 ?? "").trim(),
-    };
-  }, [logId, logDetail]);
+  lastSyncedRef.current = {
+    a1: logDetail.answer1 ?? null,
+    a2: logDetail.answer2 ?? null,
+    a3: (logDetail.answer3 ?? "").trim(),
+  };
+}, [logDetail, currentLogId]);
 
   const isDirty = useMemo(() => {
     if (!logId) return false;
@@ -188,7 +222,7 @@ export default function SurveyPage() {
       a3: (logDetail.answer3 ?? "").trim(),
     };
 
-    return base.a1 !== answer1 || base.a2 !== answer2 || base.a3 !== answer3;
+    return base.a1 !== answer1 || base.a2 !== answer2 || base.a3 !== (answer3 ?? "");
   }, [logId, logDetail, answer1, answer2, answer3]);
 
   const [patchTrigger, setPatchTrigger] = useState(0);
@@ -199,11 +233,19 @@ export default function SurveyPage() {
     answer1,
     answer2,
     answer3,
+    date: dateStr,
     trigger: patchTrigger,
     debounceMs: 500,
-    enabled: Boolean(logId) && Boolean(logDetail) && isDirty,
+    enabled:
+      !confirmOpen &&
+      !deleteMutation.isPending &&
+      !suppressPatchRef.current &&
+      Boolean(logId) &&
+      Boolean(logDetail) &&
+      (answer1 !== null || answer2 !== null || answer3 !== null) &&
+      isDirty,
     onSuccess: () => {
-      lastSyncedRef.current = { a1: answer1, a2: answer2, a3: answer3 };
+      lastSyncedRef.current = { a1: answer1, a2: answer2, a3: answer3 ?? "" };
       queryClient.invalidateQueries({ queryKey: ["logs", "monthly"] });
       if (logId) {
         queryClient.invalidateQueries({ queryKey: ["logs", "detail", logId] });
@@ -211,7 +253,6 @@ export default function SurveyPage() {
     },
   });
 
-  const textPatchTimerRef = useRef<number | null>(null);
   useEffect(() => {
     return () => {
       if (textPatchTimerRef.current) window.clearTimeout(textPatchTimerRef.current);
@@ -246,24 +287,46 @@ export default function SurveyPage() {
 
   useEffect(() => {
     if (logId) return;
+    suppressPatchRef.current = false;
     setSingle({ q1: initial.q1, q2: initial.q2 });
     setText(initial.q3);
   }, [logId, initial.q1, initial.q2, initial.q3]);
 
   const onDelete = () => {
+    suppressPatchRef.current = true;
+    suppressAutoCreateRef.current = true;
+    if (textPatchTimerRef.current) {
+      window.clearTimeout(textPatchTimerRef.current);
+      textPatchTimerRef.current = null;
+    }
     setConfirmOpen(true);
   };
 
   const handleConfirmDelete = async () => {
     setConfirmOpen(false);
+    suppressPatchRef.current = true;
+    suppressAutoCreateRef.current = true;
+    if (textPatchTimerRef.current) {
+      window.clearTimeout(textPatchTimerRef.current);
+      textPatchTimerRef.current = null;
+    }
 
-    if (!logId) {
-      navigate(-1);
+    const effectiveLogId = currentLogId;
+
+    console.log("[SurveyPage] delete attempt", {
+      logId,
+      createdLogIdRef: createdLogIdRef.current,
+      logDetailId: logDetail?.logId,
+      effectiveLogId,
+    });
+
+    if (!effectiveLogId) {
+    
       return;
     }
 
     try {
-      await deleteMutation.mutateAsync(logId);
+      await deleteMutation.mutateAsync(effectiveLogId);
     } catch {
     }
   };
@@ -280,15 +343,18 @@ export default function SurveyPage() {
       return next;
     });
 
-    if (logId) bumpPatch();
+    if (logId && !suppressPatchRef.current) bumpPatch();
+    if (!logId) suppressAutoCreateRef.current = false;
   };
 
   const onChangeText = (v: string, maxLen: number) => {
     setText(v.slice(0, maxLen));
+    if (!logId) suppressAutoCreateRef.current = false;
 
     if (!logId) return;
     if (textPatchTimerRef.current) window.clearTimeout(textPatchTimerRef.current);
     textPatchTimerRef.current = window.setTimeout(() => {
+      if (suppressPatchRef.current) return;
       bumpPatch();
     }, 600);
   };
@@ -363,6 +429,7 @@ export default function SurveyPage() {
                             window.clearTimeout(textPatchTimerRef.current);
                             textPatchTimerRef.current = null;
                           }
+                          if (suppressPatchRef.current) return;
                           bumpPatch();
                         }}
                         placeholder={q.placeholder}
@@ -388,7 +455,11 @@ export default function SurveyPage() {
         cancelText="취소"
         confirmText="삭제"
         variant="danger"
-        onCancel={() => setConfirmOpen(false)}
+        onCancel={() => {
+          suppressPatchRef.current = false;
+          suppressAutoCreateRef.current = false;
+          setConfirmOpen(false);
+        }}
         onConfirm={handleConfirmDelete}
       />
 
