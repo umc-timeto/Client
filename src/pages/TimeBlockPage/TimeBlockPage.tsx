@@ -487,7 +487,10 @@ export default function TimeBlockPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingAutoAppend, setPendingAutoAppend] = useState<{
     blockId: number | string;
-    startAt: string;
+    dateStr: string;
+    requestedStartAt: string;
+    durationMin: number;
+    autoStartAt: string;
   } | null>(null);
   const [openTaskId, setOpenTaskId] = useState<number | null>(null);
 
@@ -574,18 +577,40 @@ export default function TimeBlockPage() {
   );
 
   const moveBlockMutation = useMutation({
-    mutationFn: async (vars: { blockId: number | string; startAt: string }) => {
+    mutationFn: async (vars: { blockId: number | string; startAt: string; dateStr: string; durationMin: number }) => {
       return timeBlockMoveApi.moveBlock(vars.blockId, vars.startAt);
     },
     onError: (err: any, vars) => {
-      if (err?.response?.status === 400) {
-        setPendingAutoAppend(vars);
-        setConfirmOpen(true);
-      }
+      if (err?.response?.status !== 400) return;
+
+      const cached = queryClient.getQueryData<BlockDayItem[]>(["timeblocks", vars.dateStr]);
+      const arr = Array.isArray(cached) ? cached : [];
+
+      const reqStart = new Date(vars.startAt);
+      const reqEnd = new Date(reqStart.getTime() + vars.durationMin * 60_000);
+
+      const conflicts = arr
+        .filter((b) => String(b.blockId) !== String(vars.blockId))
+        .map((b) => ({ b, s: new Date(b.startAt), e: new Date(b.endAt) }))
+        .filter(({ s, e }) => reqStart < e && reqEnd > s);
+
+      const autoStartDt =
+        conflicts.length > 0
+          ? conflicts.reduce((acc, cur) => (cur.e > acc ? cur.e : acc), conflicts[0].e)
+          : reqStart;
+
+      const autoStartAt = formatLocalStartAt(autoStartDt);
+
+      setPendingAutoAppend({
+        blockId: vars.blockId,
+        dateStr: vars.dateStr,
+        requestedStartAt: vars.startAt,
+        durationMin: vars.durationMin,
+        autoStartAt,
+      });
+      setConfirmOpen(true);
     },
     onSettled: () => {
-      
-      
       queryClient.invalidateQueries({
         queryKey: ["timeblocks"],
         exact: false,
@@ -773,6 +798,8 @@ const {
       moveBlockMutation.mutate({
         blockId: layout.blockId,
         startAt: formatLocalStartAt(nextStartDt),
+        dateStr: targetDateStr,
+        durationMin,
       });
     },
     [
@@ -911,8 +938,33 @@ const {
         }}
         onConfirm={() => {
           if (pendingAutoAppend) {
-            moveBlockMutation.mutate(pendingAutoAppend);
+            const { blockId, dateStr, autoStartAt, durationMin } = pendingAutoAppend;
+
+            const startDt = new Date(autoStartAt);
+            const endDt = new Date(startDt.getTime() + durationMin * 60_000);
+            const nextStartAtStr = formatLocalStartAt(startDt) + ":00";
+            const nextEndAtStr = formatLocalStartAt(endDt) + ":00";
+
+            queryClient.setQueryData<BlockDayItem[]>(["timeblocks", dateStr], (prev) => {
+              const arr = Array.isArray(prev) ? prev : [];
+              return arr.map((b) => {
+                if (String(b.blockId) !== String(blockId)) return b;
+                return {
+                  ...b,
+                  startAt: nextStartAtStr,
+                  endAt: nextEndAtStr,
+                };
+              });
+            });
+
+            moveBlockMutation.mutate({
+              blockId,
+              startAt: formatLocalStartAt(startDt),
+              dateStr,
+              durationMin,
+            });
           }
+
           setConfirmOpen(false);
           setPendingAutoAppend(null);
         }}
