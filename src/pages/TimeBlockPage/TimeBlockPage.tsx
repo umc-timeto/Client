@@ -1,12 +1,23 @@
 import CalendarMonth from "@/pages/TimeBlockPage/components/CalendarMonth";
+import ConfirmModal from "@/components/ConfirmModal";
 import CalendarWeekStrip from "@/pages/TimeBlockPage/components/CalendarWeekStrip";
 import useCalendarModel from "@/hooks/TimeBlockPage/useCalendarModel";
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDraggable,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+
 import { timeBlockDayApi } from "@/apis/TimeBlockPage/timeBlockDay";
 import { todoStatusApi, type TodoStatusState } from "@/apis/TimeBlockPage/todoStatus";
+import { timeBlockMoveApi } from "@/apis/TimeBlockPage/timeBlockMove";
 import FlagSvg from "@/assets/flag.svg?react";
 import type { ColorKey } from "@/constants/timeBlockCreateStore";
 import { colorHexToKey } from "@/utils/ColorMapping";
@@ -34,6 +45,40 @@ const colorVar = (key: ColorKey, tone: "nomal" | "light") =>
   `var(--color-folder-${key}-${tone})`;
 
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+const parseYmd = (ymd: string) => {
+  const m = /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd : null;
+  if (!m) return null;
+  const [y, mo, d] = m.split("-").map((x) => Number(x));
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
+  return { y, mo, d };
+};
+
+const formatLocalStartAt = (d: Date) => {
+  // server expects e.g. "2026-02-16T14:00" (no seconds)
+  const y = d.getFullYear();
+  const m = pad2(d.getMonth() + 1);
+  const day = pad2(d.getDate());
+  const hh = pad2(d.getHours());
+  const mm = pad2(d.getMinutes());
+  return `${y}-${m}-${day}T${hh}:${mm}`;
+};
+
+const minutesToLocalDate = (selectedDateStr: string, startAdjMinutes: number) => {
+  const p = parseYmd(selectedDateStr);
+  if (!p) return null;
+
+  const base = new Date(p.y, p.mo - 1, p.d, 0, 0, 0, 0);
+  const dayOffset = Math.floor(startAdjMinutes / (24 * 60));
+  const minsInDay = ((startAdjMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+  const hh = Math.floor(minsInDay / 60);
+  const mm = minsInDay % 60;
+
+  const dt = new Date(base);
+  dt.setDate(dt.getDate() + dayOffset);
+  dt.setHours(hh, mm, 0, 0);
+  return dt;
+};
 
 const toTimeLabel = (h: number) => {
   const hour = ((h % 24) + 24) % 24;
@@ -293,26 +338,46 @@ function TimeBlockItem(props: {
   idx: number;
   done: boolean;
   onToggle: () => void;
+  draggable: {
+    listeners?: Record<string, unknown>;
+    attributes?: Record<string, unknown>;
+    setNodeRef: (node: HTMLElement | null) => void;
+    transformY: number;
+    isDragging: boolean;
+  };
 }) {
-  const { layout, idx, done, onToggle } = props;
+  const { layout, idx, done, onToggle, draggable } = props;
   const { blockId, topPx, heightPx, lane, cols, task, folder, colorKey } = layout;
+
+  const baseStyle = blockPositionStyle({
+    topPx,
+    heightPx,
+    lane,
+    cols,
+    idx,
+    backgroundColor: colorVar(colorKey, "light"),
+  });
+
+  const style: CSSProperties = {
+    ...baseStyle,
+    transform: `translate3d(0, ${draggable.transformY}px, 0)`,
+    cursor: "grab",
+    touchAction: "none",
+    opacity: draggable.isDragging ? 0.9 : 1,
+  };
 
   return (
     <button
+      ref={draggable.setNodeRef as any}
       key={blockId}
       type="button"
       className={`absolute rounded-[5px] text-left box-border overflow-visible ${
         cols === 2 && lane === 1 ? "border border-white" : ""
       }`}
-      style={blockPositionStyle({
-        topPx,
-        heightPx,
-        lane,
-        cols,
-        idx,
-        backgroundColor: colorVar(colorKey, "light"),
-      })}
+      style={style}
       onClick={onToggle}
+      {...(draggable.attributes as any)}
+      {...(draggable.listeners as any)}
     >
       <div className={`relative flex h-full w-full ${cols > 1 ? "px-3" : "px-4"}`}>
         <div className="flex h-full w-full min-w-0 items-center">
@@ -360,16 +425,58 @@ function TimeBlockItem(props: {
   );
 }
 
+function DraggableTimeBlockItem(props: {
+  layout: BlockLayout;
+  idx: number;
+  done: boolean;
+  onToggle: () => void;
+}) {
+  const { layout, idx, done, onToggle } = props;
+  const { setNodeRef, listeners, attributes, transform, isDragging } = useDraggable({
+    id: layout.blockId,
+  });
+
+  return (
+    <TimeBlockItem
+      layout={layout}
+      idx={idx}
+      done={done}
+      onToggle={onToggle}
+      draggable={{
+        setNodeRef,
+        listeners,
+        attributes: attributes as unknown as Record<string, unknown>,
+        transformY: transform?.y ?? 0,
+        isDragging: Boolean(isDragging),
+      }}
+    />
+  );
+}
+
 export default function TimeBlockPage() {
   const today = useMemo(() => startOfDay(new Date()), []);
 
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // Local selected date state that updates immediately on pick
+  const defaultTodayStr = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
+  const [selectedDateStr, setSelectedDateStr] = useState(() => searchParams.get("date") ?? defaultTodayStr);
+
+  useEffect(() => {
+    const next = searchParams.get("date") ?? defaultTodayStr;
+    setSelectedDateStr(next);
+  }, [searchParams, defaultTodayStr]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const monthSectionRef = useRef<HTMLDivElement | null>(null);
   const [isCondensed, setIsCondensed] = useState(false);
 
   const [doneIds, setDoneIds] = useState<Record<string, boolean>>({});
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingAutoAppend, setPendingAutoAppend] = useState<{
+    blockId: number | string;
+    startAt: string;
+  } | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -398,16 +505,37 @@ export default function TimeBlockPage() {
     },
   });
 
-  const selectedDateStr = searchParams.get("date") ?? `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
+  // const selectedDateStr = searchParams.get("date") ?? `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
 
-useEffect(() => {
-  sessionStorage.setItem("timetto_timeblock_date", selectedDateStr);
-}, [selectedDateStr]);
+  useEffect(() => {
+    sessionStorage.setItem("timetto_timeblock_date", selectedDateStr);
+  }, [selectedDateStr]);
 
   const ROW_HEIGHT_PX = 64;
   const START_HOUR = 5;
   const START_MIN = START_HOUR * 60;
   const PX_PER_MIN = ROW_HEIGHT_PX / 60;
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    })
+  );
+
+  const moveBlockMutation = useMutation({
+    mutationFn: async (vars: { blockId: number | string; startAt: string }) => {
+      return timeBlockMoveApi.moveBlock(vars.blockId, vars.startAt);
+    },
+    onError: (err: any, vars) => {
+      if (err?.response?.status === 400) {
+        setPendingAutoAppend(vars);
+        setConfirmOpen(true);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["timeblocks", "day", selectedDateStr] });
+    },
+  });
 
 const { monthMatrix, selectedWeek, hours } = useCalendarModel({
   today,
@@ -419,6 +547,9 @@ const { monthMatrix, selectedWeek, hours } = useCalendarModel({
 const pickDate = (dateStr: string) => {
   const v = String(dateStr ?? "").trim();
   if (!v) return;
+
+  // keep local date in sync immediately (prevents stale date being used by downstream navigation)
+  setSelectedDateStr(v);
 
   setSearchParams(
     (prev) => {
@@ -450,6 +581,87 @@ const pickDate = (dateStr: string) => {
       debug: import.meta.env.DEV,
     });
   }, [blocksForDay, selectedDateStr, START_MIN, PX_PER_MIN]);
+
+  // Helper: add days to ymd string
+  const addDaysToYmd = (ymd: string, offset: number) => {
+    const p = parseYmd(ymd);
+    if (!p) return ymd;
+    const base = new Date(p.y, p.mo - 1, p.d);
+    base.setDate(base.getDate() + offset);
+    return `${base.getFullYear()}-${pad2(base.getMonth() + 1)}-${pad2(base.getDate())}`;
+  };
+
+  const onDragEnd = useCallback(
+    (e: DragEndEvent) => {
+      const activeId = String(e.active?.id ?? "");
+      if (!activeId) return;
+
+      const layout = layoutsForDay.find((l) => l.blockId === activeId);
+      if (!layout) return;
+
+      const deltaMinRaw = e.delta?.y ? e.delta.y / PX_PER_MIN : 0;
+      if (!Number.isFinite(deltaMinRaw) || Math.abs(deltaMinRaw) < 0.5) return;
+
+      // snap to 5 minutes
+      const snap = 5;
+      const deltaMin = Math.round(deltaMinRaw / snap) * snap;
+
+      const durationMin = Math.max(1, layout.endAdj - layout.startAdj);
+      const minStart = START_MIN;
+      const maxStart = START_MIN + 24 * 60 - durationMin;
+
+      const nextStartAdj = Math.min(maxStart, Math.max(minStart, layout.startAdj + deltaMin));
+
+      // detect horizontal drag for date move (desktop support)
+      const deltaX = e.delta?.x ?? 0;
+
+      // 200px ≈ 1 day threshold (tweakable)
+      const dayOffset = Math.round(deltaX / 200);
+
+      const targetDateStr =
+        dayOffset !== 0 ? addDaysToYmd(selectedDateStr, dayOffset) : selectedDateStr;
+
+      const nextStartDt = minutesToLocalDate(targetDateStr, nextStartAdj);
+      if (!nextStartDt) return;
+
+      const nextEndDt = new Date(nextStartDt.getTime() + durationMin * 60000);
+
+      // if moved to another day, update selected date immediately
+      if (dayOffset !== 0) {
+        setSelectedDateStr(targetDateStr);
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            next.set("date", targetDateStr);
+            next.set("ym", targetDateStr.slice(0, 7));
+            next.set("w", targetDateStr);
+            return next;
+          },
+          { replace: true }
+        );
+      }
+
+      // update the cached day list immediately so UI follows drag
+      queryClient.setQueryData<BlockDayItem[]>(["timeblocks", "day", selectedDateStr], (prev) => {
+        const arr = Array.isArray(prev) ? prev : [];
+        return arr.map((b) => {
+          if (String(b.blockId) !== activeId) return b;
+          return {
+            ...b,
+            startAt: formatLocalStartAt(nextStartDt) + ":00",
+            endAt: formatLocalStartAt(nextEndDt) + ":00",
+          };
+        });
+      });
+
+      // best-effort persist (server policy may still adjust)
+      moveBlockMutation.mutate({
+        blockId: layout.blockId,
+        startAt: formatLocalStartAt(nextStartDt),
+      });
+    },
+    [PX_PER_MIN, START_MIN, layoutsForDay, queryClient, selectedDateStr, moveBlockMutation]
+  );
 
   useEffect(() => {
     setDoneIds((prev) => {
@@ -522,30 +734,50 @@ const pickDate = (dateStr: string) => {
               </div>
             ))}
 
-            <div className="absolute left-0 right-0 top-0 z-0">
-              {(layoutsForDay ?? []).map((layout, idx) => (
-                <TimeBlockItem
-                  key={layout.blockId}
-                  layout={layout}
-                  idx={idx}
-                  done={Boolean(doneIds[layout.blockId] ?? (layout.state === "complete"))}
-                  onToggle={() => {
-                    const currentDone = Boolean(doneIds[layout.blockId] ?? (layout.state === "complete"));
-                    const nextState: TodoStatusState = currentDone ? "progress" : "complete";
+            <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+              <div className="absolute left-0 right-0 top-0 z-0">
+                {(layoutsForDay ?? []).map((layout, idx) => (
+                  <DraggableTimeBlockItem
+                    key={layout.blockId}
+                    layout={layout}
+                    idx={idx}
+                    done={Boolean(doneIds[layout.blockId] ?? (layout.state === "complete"))}
+                    onToggle={() => {
+                      const currentDone = Boolean(doneIds[layout.blockId] ?? (layout.state === "complete"));
+                      const nextState: TodoStatusState = currentDone ? "progress" : "complete";
 
-                    setDoneIds((prev) => ({
-                      ...prev,
-                      [layout.blockId]: !currentDone,
-                    }));
+                      setDoneIds((prev) => ({
+                        ...prev,
+                        [layout.blockId]: !currentDone,
+                      }));
 
-                    toggleTodoStatusMutation.mutate({ todoId: layout.todoId, state: nextState });
-                  }}
-                />
-              ))}
-            </div>
+                      toggleTodoStatusMutation.mutate({ todoId: layout.todoId, state: nextState });
+                    }}
+                  />
+                ))}
+              </div>
+            </DndContext>
           </div>
         </div>
       </div>
+      <ConfirmModal
+        open={confirmOpen}
+        title="선택한 시간에 다른 할 일이 있어요"
+        cancelText="취소"
+        confirmText="확인"
+        variant="timeblockConflict"
+        onCancel={() => {
+          setConfirmOpen(false);
+          setPendingAutoAppend(null);
+        }}
+        onConfirm={() => {
+          if (pendingAutoAppend) {
+            moveBlockMutation.mutate(pendingAutoAppend);
+          }
+          setConfirmOpen(false);
+          setPendingAutoAppend(null);
+        }}
+      />
     </div>
   );
 }
