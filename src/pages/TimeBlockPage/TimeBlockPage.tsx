@@ -114,6 +114,7 @@ type BlockItem = {
   minutes: number;
   startAdj: number;
   endAdj: number;
+  visualEndAdj: number;
 };
 
 type BlockLayout = {
@@ -159,8 +160,12 @@ const computeLayoutsForDay = (args: {
       const task = { title: b.todoName };
       const folder = b.goalName ? { title: b.goalName } : undefined;
 
+      const minMinutesForMinHeight = Math.ceil(28 / PX_PER_MIN);
+      const visualMinutes = Math.max(minutes, minMinutesForMinHeight);
+
       const startAdj = startMin !== null && startMin < START_MIN ? startMin + 24 * 60 : startMin;
       const endAdj = startAdj !== null ? startAdj + minutes : null;
+      const visualEndAdj = startAdj !== null ? startAdj + visualMinutes : null;
 
       return {
         b,
@@ -171,9 +176,12 @@ const computeLayoutsForDay = (args: {
         minutes,
         startAdj: startAdj ?? 0,
         endAdj: endAdj ?? 0,
+        visualEndAdj: visualEndAdj ?? 0,
       };
     })
-    .filter((x) => Number.isFinite(x.startAdj) && Number.isFinite(x.endAdj)) as BlockItem[];
+    .filter((x) =>
+      Number.isFinite(x.startAdj) && Number.isFinite(x.endAdj) && Number.isFinite(x.visualEndAdj)
+    ) as BlockItem[];
 
   raw.sort((a, b) => {
     if (a.startAdj !== b.startAdj) return a.startAdj - b.startAdj;
@@ -191,7 +199,7 @@ const computeLayoutsForDay = (args: {
 
   type ActiveVisible = {
     id: string;
-    endAdj: number;
+    visualEndAdj: number;
     lane: 0 | 1;
   };
 
@@ -210,7 +218,7 @@ const computeLayoutsForDay = (args: {
     const lanes: (0 | 1)[] = [0, 1];
     for (const ln of lanes) {
       const v = activeByLane[ln];
-      if (v && v.endAdj <= nowStartAdj) delete activeByLane[ln];
+      if (v && v.visualEndAdj <= nowStartAdj) delete activeByLane[ln];
     }
   };
 
@@ -267,7 +275,7 @@ const computeLayoutsForDay = (args: {
       else if (lane1Free) lane = 1;
       else {
         willRender = false;
-        hiddenEnds.push(it.endAdj);
+        hiddenEnds.push(it.visualEndAdj);
       }
     }
 
@@ -295,7 +303,7 @@ const computeLayoutsForDay = (args: {
         layoutById.set(String(it.b.blockId), l);
       }
 
-      activeByLane[lane] = { id: String(it.b.blockId), endAdj: it.endAdj, lane };
+      activeByLane[lane] = { id: String(it.b.blockId), visualEndAdj: it.visualEndAdj, lane };
     }
   }
 

@@ -88,7 +88,9 @@ export default function SurveyPage() {
   const [currentLogId, setCurrentLogId] = useState<number | null>(logId);
 
   useEffect(() => {
-    setCurrentLogId(logId);
+    if (logId) {
+      setCurrentLogId(logId);
+    }
   }, [logId]);
 
   const date = useMemo(() => {
@@ -161,6 +163,14 @@ export default function SurveyPage() {
 
   const dateStr = useMemo(() => toYmd(date), [date]);
 
+  const detailQueryId = (currentLogId ?? logId) ?? 0;
+  const { data: logDetail } = useLogDetail(detailQueryId);
+
+  const effectiveLogId = useMemo(() => {
+    const fromDetail = typeof logDetail?.logId === "number" ? logDetail.logId : null;
+    return fromDetail ?? currentLogId ?? logId ?? createdLogIdRef.current;
+  }, [logDetail, currentLogId, logId]);
+
   const { isPosting } = useAutoCreateLog({
     answer1,
     answer2,
@@ -171,8 +181,13 @@ export default function SurveyPage() {
       !confirmOpen &&
       !deleteMutation.isPending &&
       !suppressAutoCreateRef.current &&
-      !logId &&
+      !effectiveLogId &&
       (answer1 !== null || answer2 !== null),
+    onMutate: () => {
+      // POST가 실제로 나가는 순간부터는 URL에 logId가 붙기 전이라도
+      // 같은 화면에서 추가 POST가 재발사되지 않도록 즉시 잠금
+      suppressAutoCreateRef.current = true;
+    },
     onSuccess: (createdLogId) => {
       suppressAutoCreateRef.current = true;
       queryClient.invalidateQueries({ queryKey: ["logs", "monthly"] });
@@ -186,16 +201,12 @@ export default function SurveyPage() {
       next.set("logId", String(createdLogId));
 
       suppressAutoCreateRef.current = true;
-      if (createdLogId) {
-        createdLogIdRef.current = createdLogId;
-        setCurrentLogId(createdLogId);
-      }
+      createdLogIdRef.current = createdLogId;
+      setCurrentLogId(createdLogId);
 
       navigate({ pathname: "/mylog/survey", search: `?${next.toString()}` }, { replace: true });
     },
   });
-
-  const { data: logDetail } = useLogDetail(logId ?? 0);
 
 useEffect(() => {
   if (!logDetail) return;
@@ -229,7 +240,7 @@ useEffect(() => {
   const bumpPatch = () => setPatchTrigger((v) => v + 1);
 
   const { isPatching } = useAutoUpdateLog({
-    logId,
+    logId: effectiveLogId,
     answer1,
     answer2,
     answer3,
@@ -240,15 +251,15 @@ useEffect(() => {
       !confirmOpen &&
       !deleteMutation.isPending &&
       !suppressPatchRef.current &&
-      Boolean(logId) &&
+      Boolean(effectiveLogId) &&
       Boolean(logDetail) &&
       (answer1 !== null || answer2 !== null || answer3 !== null) &&
       isDirty,
     onSuccess: () => {
       lastSyncedRef.current = { a1: answer1, a2: answer2, a3: answer3 ?? "" };
       queryClient.invalidateQueries({ queryKey: ["logs", "monthly"] });
-      if (logId) {
-        queryClient.invalidateQueries({ queryKey: ["logs", "detail", logId] });
+      if (effectiveLogId) {
+        queryClient.invalidateQueries({ queryKey: ["logs", "detail", effectiveLogId] });
       }
     },
   });
@@ -311,12 +322,17 @@ useEffect(() => {
       textPatchTimerRef.current = null;
     }
 
-    const effectiveLogId = currentLogId;
+    const effectiveLogId =
+      (typeof logDetail?.logId === "number" ? logDetail.logId : null) ??
+      currentLogId ??
+      logId ??
+      createdLogIdRef.current;
 
     console.log("[SurveyPage] delete attempt", {
-      logId,
+      queryLogId: logId,
+      currentLogId,
       createdLogIdRef: createdLogIdRef.current,
-      logDetailId: logDetail?.logId,
+      detailLogId: logDetail?.logId,
       effectiveLogId,
     });
 
@@ -343,15 +359,23 @@ useEffect(() => {
       return next;
     });
 
-    if (logId && !suppressPatchRef.current) bumpPatch();
-    if (!logId) suppressAutoCreateRef.current = false;
+    // NOTE: POST 직후에는 아직 URL의 logId가 없을 수 있으므로,
+    // logId(query) 대신 effectiveLogId/currentLogId/createdLogIdRef 기준으로 분기해야 합니다.
+    const hasAnyLogId = Boolean(effectiveLogId ?? currentLogId ?? createdLogIdRef.current);
+
+    if (hasAnyLogId && !suppressPatchRef.current) bumpPatch();
+
+    // 아직 어떤 logId도 없을 때만 auto-create를 다시 허용
+    if (!hasAnyLogId) suppressAutoCreateRef.current = false;
   };
 
   const onChangeText = (v: string, maxLen: number) => {
     setText(v.slice(0, maxLen));
-    if (!logId) suppressAutoCreateRef.current = false;
+    const hasAnyLogId = Boolean(effectiveLogId ?? currentLogId ?? createdLogIdRef.current);
 
-    if (!logId) return;
+    if (!hasAnyLogId) suppressAutoCreateRef.current = false;
+
+    if (!hasAnyLogId) return;
     if (textPatchTimerRef.current) window.clearTimeout(textPatchTimerRef.current);
     textPatchTimerRef.current = window.setTimeout(() => {
       if (suppressPatchRef.current) return;
@@ -424,7 +448,8 @@ useEffect(() => {
                         value={text}
                         onChange={(e) => onChangeText(e.target.value, q.maxLen)}
                         onBlur={() => {
-                          if (!logId) return;
+                          const hasAnyLogId = Boolean(effectiveLogId ?? currentLogId ?? createdLogIdRef.current);
+                          if (!hasAnyLogId) return;
                           if (textPatchTimerRef.current) {
                             window.clearTimeout(textPatchTimerRef.current);
                             textPatchTimerRef.current = null;
